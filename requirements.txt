@@ -1,0 +1,2 @@
+# Install everything needed for local development
+-r requirements-dev.txt

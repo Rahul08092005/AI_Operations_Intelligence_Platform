@@ -1,0 +1,12 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["frontend", "data", "models"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+# "." lets tests import the ml/ and rag/ packages, "backend" lets them import app
+pythonpath = [".", "backend"]
+testpaths = ["tests"]
