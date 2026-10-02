@@ -1,0 +1,56 @@
+# ---------- Python ----------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+
+# ---------- Node / Frontend ----------
+node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+
+# ---------- Environment and secrets ----------
+.env
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# ---------- Data (large files stay local) ----------
+data/raw/*
+!data/raw/*/
+data/raw/*/*
+!data/raw/*/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/external/*
+!data/external/cmapss/
+data/external/cmapss/*
+!data/external/cmapss/.gitkeep
+!data/README.md
+
+# ---------- ML artifacts ----------
+models/*
+!models/.gitkeep
+
+# ---------- RAG index ----------
+rag/index/*
+!rag/index/.gitkeep
+
+# ---------- Docker ----------
+pgdata/
+
+# ---------- OS / Editor ----------
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
