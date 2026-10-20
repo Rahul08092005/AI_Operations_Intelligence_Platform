@@ -1,0 +1,43 @@
+================================================================================
+AI OPERATIONS INTELLIGENCE PLATFORM - RAW DATA VALIDATION REPORT
+Generated: 2026-10-20T14:52:02.505557+00:00
+Total Checks: 35 | Passed: 35 | Failed: 0
+Overall Status: PASSED
+================================================================================
+
+CHECK DETAILS:
+[PASS] File exists: machines.csv - size=1201 bytes
+[PASS] File exists: sensors_raw.csv - size=54872870 bytes
+[PASS] File exists: timeline_metadata.json - size=3679 bytes
+[PASS] File exists: maintenance_raw.csv - size=13371 bytes
+[PASS] File exists: production_raw.csv - size=310552 bytes
+[PASS] File exists: business_daily_raw.csv - size=23322 bytes
+[PASS] File exists: business_transactions_raw.csv - size=76300499 bytes
+[PASS] File exists: ai4i_state_raw.csv - size=1553237 bytes
+[PASS] File exists: metropt_failure_windows.csv - size=391 bytes
+[PASS] Row count: machines.csv == 12 - count=12
+[PASS] Row count: sensors_raw.csv == 736128 - count=736128
+[PASS] Row count: maintenance_raw.csv in [30, 60] - count=43
+[PASS] Row count: production_raw.csv == 2556 - count=2556
+[PASS] Row count: business_daily_raw.csv == 213 - count=213
+[PASS] Row count: business_transactions_raw.csv in [400000, 550000] - count=536636
+[PASS] Row count: ai4i_state_raw.csv == 10000 - count=10000
+[PASS] FK integrity: sensors_raw machine_ids valid
+[PASS] FK integrity: maintenance_raw machine_ids valid
+[PASS] FK integrity: production_raw machine_ids valid
+[PASS] Temporal alignment: sensors_raw covers 2026-03-21 to 2026-10-19 - min=2026-03-21 00:00:00+00:00, max=2026-10-19 23:55:00+00:00
+[PASS] Temporal alignment: production_raw dates cover timeline
+[PASS] Temporal alignment: business_daily_raw dates cover timeline
+[PASS] Operating hours strictly monotonic per machine
+[PASS] Healthy machines vibration strictly < 4.5 mm/s - max=3.935
+[PASS] M-104 first vibration warning crossing between 7 and 14 days before end - first_cross=2026-10-07 00:15:00+00:00, days_before_end=12.99
+[PASS] M-104 final 24h temperature exceeds healthy 95th percentile by >= 8 °C - last_day=83.99, t95=75.81, diff=8.18
+[PASS] M-104 has inspection record on 2026-09-20
+[PASS] M-104 inspection contains expected manifold warning note
+[PASS] M-106 has recent PM record
+[PASS] M-112 has ongoing overhaul starting 2026-10-18
+[PASS] M-104 scrap rate significantly elevated in final 14 days - early=0.020, late=0.058
+[PASS] OEE bounded in [0, 1] - min=0.0, max=0.985
+[PASS] Business daily inventory >= 0
+[PASS] Business daily backorders >= 0
+[PASS] Business daily revenue > 0
