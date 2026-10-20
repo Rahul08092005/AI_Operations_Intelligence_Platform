@@ -44,6 +44,9 @@
 - Several sampling intervals deviate from 10s (ranging from 1s to ~20s, plus a few offline maintenance gaps).
 - `COMP` is inverse logic to intuition: 1 denotes no air intake (offloaded/idle), 0 denotes active air intake (under load).
 
+### Failure Windows Ground Truth
+The ground truth failure windows extracted from `Data Description_Metro.pdf` are recorded in `ml/preprocessing/reference/metropt_failure_windows.csv` (4 failure events: FAIL-001 to FAIL-004, all Air Leaks). On **Day 5**, these unshifted (and appropriately shifted) windows serve as the definitive evaluation ground truth for unsupervised anomaly detection models on machine `M-104`.
+
 ---
 
 ## 2. AI4I 2020 Predictive Maintenance Dataset
