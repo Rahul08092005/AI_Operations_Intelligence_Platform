@@ -4,9 +4,12 @@ from datetime import date
 from pathlib import Path
 
 SEED = 42
+TIMELINE_START = date(2026, 3, 21)
 TIMELINE_END = date(2026, 10, 19)  # last day of generated data (inclusive)
 SENSOR_FREQ = "5min"
 CURRENCY = "GBP"
+I_OFF = 1.55  # Motor current cutoff (Amps) for running state
+ENERGY_UNIT_RATE_GBP = 0.22  # Industrial UK electric tariff
 
 ROOT = Path(__file__).resolve().parents[2]
 RAW = ROOT / "data" / "raw"
