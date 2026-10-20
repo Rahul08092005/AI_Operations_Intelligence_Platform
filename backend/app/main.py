@@ -25,7 +25,9 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
-    logger.info("Starting %s v%s [%s]", settings.app_name, settings.app_version, settings.environment)
+    logger.info(
+        "Starting %s v%s [%s]", settings.app_name, settings.app_version, settings.environment
+    )
     logger.info("Database reachable: %s", check_db())
     # Day 7: load trained models once here (anomaly_model.pkl, failure_model.pkl)
     yield

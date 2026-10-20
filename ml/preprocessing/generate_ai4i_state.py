@@ -60,8 +60,8 @@ def generate_ai4i_state() -> pd.DataFrame:
         for _, row in df.iterrows()
     ]
 
-    now_iso = datetime.now(tz=UTC).isoformat()
-    df["created_at"] = now_iso
+    # Deterministic created_at timestamp
+    df["created_at"] = datetime(2026, 10, 19, 23, 59, tzinfo=UTC).isoformat()
 
     cols = [
         "state_id",

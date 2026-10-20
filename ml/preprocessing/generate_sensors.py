@@ -141,7 +141,9 @@ def apply_real_failure_windows_overlay(
             pre_ramp = (
                 (pre_ts - precursor_start).dt.total_seconds() / (72 * 3600)
             ).to_numpy(dtype=np.float64)
-            df.loc[mask_pre, "vibration"] = df.loc[mask_pre, "vibration"] * (1.0 + 0.6 * pre_ramp)
+            df.loc[mask_pre, "vibration"] = np.minimum(
+                df.loc[mask_pre, "vibration"] * (1.0 + 0.6 * pre_ramp), 4.2
+            )
             df.loc[mask_pre, "temperature"] = df.loc[mask_pre, "temperature"] + 3.0 * pre_ramp
 
         # Inside window
@@ -167,6 +169,10 @@ def apply_hero_degradation(
     if not mask.any():
         return df
 
+    # Ensure prior to degradation vibration is strictly capped at 4.2 mm/s
+    pre_mask = df["timestamp"] < start_degrade
+    df.loc[pre_mask, "vibration"] = np.minimum(df.loc[pre_mask, "vibration"], 4.2)
+
     k = 3.0
     ts_degrade = df.loc[mask, "timestamp"]
     total_sec = degrade_days * 86400
@@ -179,13 +185,17 @@ def apply_hero_degradation(
     df.loc[mask, "vibration"] = df.loc[mask, "vibration"] + (7.8 - v_healthy_mean) * ramp
 
     # Temperature elevation: ensure last 24h exceeds healthy 95th percentile by >= 8°C
-    t_healthy = df.loc[~mask, "temperature"]
-    t95 = float(t_healthy.quantile(0.95))
+    t_healthy = df.loc[~mask, "temperature"].dropna()
+    t95 = float(np.percentile(t_healthy, 95)) if len(t_healthy) > 0 else 75.0
     last_24h_mask = mask & (df["timestamp"] >= pd.Timestamp(end_date) - pd.Timedelta(days=1))
     raw_last_day_temp = float(df.loc[last_24h_mask, "temperature"].mean())
-    temp_elevation = max(10.0, (t95 + 8.5) - raw_last_day_temp)
+    # Average ramp over final 24h is ~0.88; divide target lift by 0.88 to achieve desired mean
+    needed_lift = max(11.0, (t95 + 9.8) - raw_last_day_temp)
+    temp_elevation = needed_lift / 0.88
 
-    df.loc[mask, "temperature"] = df.loc[mask, "temperature"] + temp_elevation * ramp
+    df.loc[mask, "temperature"] = np.minimum(
+        df.loc[mask, "temperature"] + temp_elevation * ramp, 84.8
+    )
     df.loc[mask, "energy_consumption"] = df.loc[mask, "energy_consumption"] * (1.0 + 0.12 * ramp)
     df.loc[mask, "pressure"] = df.loc[mask, "pressure"] - 0.15 * ramp
     df.loc[mask, "rpm"] = df.loc[mask, "rpm"] * (1.0 - 0.03 * ramp)
@@ -194,6 +204,12 @@ def apply_hero_degradation(
     if rng is not None:
         noise_extra = rng.normal(0, 0.25, size=len(s)) * ramp
         df.loc[mask, "vibration"] = df.loc[mask, "vibration"] + noise_extra
+
+    # Before 13.0 days before end, ensure vibration is capped at 4.40 mm/s so first crossing
+    # is strictly between 7 and 14 days before timeline end
+    target_cross_start = pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(days=13)
+    pre_cross_mask = df["timestamp"] < target_cross_start
+    df.loc[pre_cross_mask, "vibration"] = np.minimum(df.loc[pre_cross_mask, "vibration"], 4.40)
 
     return df
 
@@ -333,6 +349,10 @@ def generate_machine_sensors(
             (df["timestamp"] >= pd.Timestamp(start_date)) & (df["timestamp"] <= window_end_ts)
         ].copy()
         df = df.rename(columns={"Oil_temperature": "temperature", "TP3": "pressure"})
+        df["temperature"] = df["temperature"].ffill().bfill()
+        df["pressure"] = df["pressure"].ffill().bfill()
+        df["Motor_current"] = df["Motor_current"].ffill().bfill()
+        df["COMP"] = df["COMP"].ffill().bfill()
     else:
         # Derived machine: daily block resampling from healthy pool
         current_scale = float(rng.uniform(0.93, 1.07))
