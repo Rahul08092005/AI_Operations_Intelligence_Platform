@@ -53,9 +53,21 @@ def compute_daily_sensor_aggregates(df_sensor_features: pd.DataFrame) -> pd.Data
         outlier_share = float(grp["is_outlier_flag"].mean()) if "is_outlier_flag" in grp else 0.0
 
         # Minutes above limits (count of intervals * 5 min)
-        vib_warn_min = float(grp["vibration_above_warning"].fillna(0).sum() * 5.0)
-        vib_crit_min = float(grp["vibration_above_critical"].fillna(0).sum() * 5.0)
-        temp_spec_min = float(grp["temperature_above_spec"].fillna(0).sum() * 5.0)
+        vib_warn_min = (
+            float(grp["vibration_above_warning"].fillna(0).sum() * 5.0)
+            if "vibration_above_warning" in grp
+            else 0.0
+        )
+        vib_crit_min = (
+            float(grp["vibration_above_critical"].fillna(0).sum() * 5.0)
+            if "vibration_above_critical" in grp
+            else 0.0
+        )
+        temp_spec_min = (
+            float(grp["temperature_above_spec"].fillna(0).sum() * 5.0)
+            if "temperature_above_spec" in grp
+            else 0.0
+        )
 
         # End of day operating hours
         op_h_valid = grp["operating_hours"].dropna()

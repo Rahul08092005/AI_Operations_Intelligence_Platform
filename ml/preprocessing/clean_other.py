@@ -134,3 +134,18 @@ def clean_business_daily(
         "rows_out": len(df),
     }
     return df, log
+
+
+def clean_machines(df_mach: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Validate and clean machines catalog."""
+    df = df_mach.copy()
+    rows_in = len(df)
+    if df.duplicated(subset=["machine_id"]).any():
+        logger.warning("Duplicate machine_id rows in machines! Keeping first.")
+        df = df.drop_duplicates(subset=["machine_id"], keep="first")
+    log = {
+        "rows_in": rows_in,
+        "rows_out": len(df),
+    }
+    return df, log
+

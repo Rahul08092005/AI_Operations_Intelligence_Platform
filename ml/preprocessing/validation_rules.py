@@ -18,11 +18,15 @@ class PhysicalLimit(NamedTuple):
 
 # Hard physical limits per signal/column
 SENSOR_LIMITS: dict[str, PhysicalLimit] = {
-    "temperature": PhysicalLimit(-20.0, 150.0, "deg_c", "Compressor/bearing temperature in degrees Celsius"),
+    "temperature": PhysicalLimit(
+        -20.0, 150.0, "deg_c", "Compressor/bearing temperature in degrees Celsius"
+    ),
     "vibration": PhysicalLimit(0.0, 30.0, "mm/s", "RMS vibration in mm/s"),
     "pressure": PhysicalLimit(0.0, 20.0, "bar", "Discharge/line pressure in bar"),
     "rpm": PhysicalLimit(0.0, 4000.0, "rpm", "Spindle or shaft rotational speed"),
-    "energy_consumption": PhysicalLimit(0.0, 10.0, "kwh", "Energy consumption per 5-minute interval in kWh"),
+    "energy_consumption": PhysicalLimit(
+        0.0, 10.0, "kwh", "Energy consumption per 5-minute interval in kWh"
+    ),
     "motor_current": PhysicalLimit(0.0, 100.0, "a", "Motor current in Amperes"),
     "operating_hours": PhysicalLimit(0.0, 200000.0, "hours", "Accumulated machine operating hours"),
     "comp_state": PhysicalLimit(0.0, 1.0, "binary", "Compressor load state (0=load, 1=offload)"),

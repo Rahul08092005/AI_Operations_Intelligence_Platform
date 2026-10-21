@@ -297,7 +297,7 @@ def check_production_and_business(
 
     # 4. Consistency: business_daily vs aggregated production
     mismatch_count = 0
-    is_sampled = len(df_prod["machine_id"].unique()) < len(df_machines)
+    is_sampled = len(df_prod["machine_id"].unique()) < 12 or len(df_machines) < 12
     if not is_sampled:
         if "total_production_units" in df_biz.columns and qty_col in df_prod.columns:
             p_agg = df_prod.groupby("date")[qty_col].sum()

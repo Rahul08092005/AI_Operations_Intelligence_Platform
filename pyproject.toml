@@ -10,3 +10,5 @@ select = ["E", "F", "I", "UP", "B"]
 # "." lets tests import the ml/ and rag/ packages, "backend" lets them import app
 pythonpath = [".", "backend"]
 testpaths = ["tests"]
+markers = ["integration: mark a test as an integration test."]
+
