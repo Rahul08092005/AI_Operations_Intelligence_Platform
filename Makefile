@@ -1,18 +1,22 @@
-.PHONY: verify-sources inspect-data data-raw validate-raw db-init test lint format clean help
+.PHONY: verify-sources inspect-data data-raw validate-raw db-init db-load pipeline pipeline-sample data test lint format clean help
 
 PYTHON ?= python
 
 help:
 	@echo "AI Operations Intelligence Platform - Available Targets:"
-	@echo "  verify-sources : Verify downloaded raw source archives"
-	@echo "  inspect-data   : Profile raw datasets and compute operating statistics"
-	@echo "  data-raw       : Generate all unified raw datasets (prepare_data.py)"
-	@echo "  validate-raw   : Run comprehensive raw data validation suite"
-	@echo "  db-init        : Initialize database schema (PostgreSQL / SQLite)"
-	@echo "  test           : Run pytest test suite"
-	@echo "  lint           : Check code quality with ruff"
-	@echo "  format         : Format code with ruff"
-	@echo "  clean          : Remove temporary cache files"
+	@echo "  verify-sources  : Verify downloaded raw source archives"
+	@echo "  inspect-data    : Profile raw datasets and compute operating statistics"
+	@echo "  data-raw        : Generate all unified raw datasets (prepare_data.py)"
+	@echo "  validate-raw    : Run comprehensive raw data validation suite"
+	@echo "  pipeline        : Run data engineering pipeline (skip db)"
+	@echo "  pipeline-sample : Run pipeline in sample mode (skip db)"
+	@echo "  db-init         : Initialize database schema (PostgreSQL / SQLite)"
+	@echo "  db-load         : Load processed data into database (load_to_db.py)"
+	@echo "  data            : Prepare raw datasets, run pipeline, and load into db"
+	@echo "  test            : Run pytest test suite"
+	@echo "  lint            : Check code quality with ruff"
+	@echo "  format          : Format code with ruff"
+	@echo "  clean           : Remove temporary cache files"
 
 verify-sources:
 	$(PYTHON) scripts/verify_sources.py
@@ -28,6 +32,19 @@ validate-raw:
 
 db-init:
 	$(PYTHON) scripts/init_db.py
+
+db-load:
+	$(PYTHON) scripts/load_to_db.py
+
+pipeline:
+	$(PYTHON) scripts/run_pipeline.py --skip-db
+
+pipeline-sample:
+	$(PYTHON) scripts/run_pipeline.py --sample --skip-db
+
+data:
+	$(PYTHON) scripts/prepare_data.py
+	$(PYTHON) scripts/run_pipeline.py
 
 test:
 	$(PYTHON) -m pytest tests/ -v

@@ -25,6 +25,19 @@
 | **D26** | PostgreSQL 16 & SQLAlchemy 2.0 ORM Architecture | 2026-10-20 | Accepted |
 | **D27** | Deterministic Reproducibility with Global Seed 42 & UUIDv5 | 2026-10-20 | Accepted |
 | **D28** | Strict Zero-Data-in-Git Exclusion Policy | 2026-10-20 | Accepted |
+| **D29** | Dual Integrated Granularities (5-min & Daily) | 2026-10-21 | Accepted |
+| **D30** | Two-Tier Outlier Policy (Physically Impossible vs. Statistical) | 2026-10-21 | Accepted |
+| **D31** | Short-Run Bounded Imputation Policy (<= 15 minutes) | 2026-10-21 | Accepted |
+| **D32** | Strictly Trailing Integer Rolling Windows (1h, 6h, 24h) | 2026-10-21 | Accepted |
+| **D33** | Ground-Truth Label Isolation | 2026-10-21 | Accepted |
+| **D34** | Parquet-First Storage Standard with Dual-Format Operations Dataset | 2026-10-21 | Accepted |
+| **D35** | Retail Transactions Cleaning & Rejection Separation | 2026-10-21 | Accepted |
+| **D36** | PostgreSQL COPY Load inside Single Atomic Transaction | 2026-10-21 | Accepted |
+| **D37** | Strict UTC Time Reference Standard | 2026-10-21 | Accepted |
+| **D38** | First 24-Hour Warmup Flagging | 2026-10-21 | Accepted |
+| **D39** | Per-Machine Baseline Modeling Deferral | 2026-10-21 | Accepted |
+| **D40** | Operations Dataset Complete-Day Filtering | 2026-10-21 | Accepted |
+| **D41** | Strictly Past Maintenance Feature As-Of Timing (D + 1) | 2026-10-21 | Accepted |
 
 ---
 
@@ -99,3 +112,95 @@
 - **Context**: Raw CSVs (several hundred megabytes) must never bloat git history.
 - **Decision**: Enforce `.gitignore` on `data/raw/unified/*.csv` and source archives; track only reproducible generator scripts and small reference tables in `ml/preprocessing/reference/`.
 - **Consequences**: Clean, lightweight repository cloneable in seconds.
+
+---
+
+## Detailed Decisions (Day 03: D29–D41)
+
+### D29: Dual Integrated Granularities (5-min & Daily)
+- **Context**: Industrial machine learning models and operational dashboards operate at fundamentally different temporal resolutions. High-frequency anomaly detection requires 5-minute telemetry, while financial correlation and demand planning require daily resolution.
+- **Decision**: Produce two primary integrated datasets: `sensor_features.parquet` at 5-minute resolution and `operations_dataset.parquet` (and `.csv`) at daily per-machine resolution.
+- **Consequences**: Prevents dataset bloating while avoiding information loss across disparate modeling and visualization layers.
+
+### D30: Two-Tier Outlier Policy (Physically Impossible vs. Statistical)
+- **Context**: Naive outlier removal destroys real failure dynamics (such as bearing overheating and severe air leak vibration).
+- **Decision**: Implement a strict two-tier architecture:
+  - **Tier 1 (Physical Impossibility):** Hard physical limit violations (e.g., $T > 150^\circ\text{C}$ or $P < 0$) are set to `NaN` and flagged with `is_sensor_fault = True`.
+  - **Tier 2 (Statistical Extremes):** Trailing 24-hour robust $z$-scores ($|Z| > 6.0$) are flagged via `is_outlier_flag = True` and listed in `outlier_signals`, but numeric values are never modified or removed.
+- **Consequences**: 100% of authentic degradation peaks and benign operational surges are preserved for machine learning detection.
+
+### D31: Short-Run Bounded Imputation Policy (<= 15 minutes)
+- **Context**: Sensor dropouts occur naturally, but unbounded interpolation fabricates artificial equipment states.
+- **Decision**: Interpolate or forward-fill contiguous gaps of at most 3 intervals (15 minutes) and flag them with `is_imputed = True`. Gaps longer than 15 minutes remain `NaN` with explicit `is_gap = True` rows.
+- **Consequences**: Maintains time-series continuity for short dropouts without masking actual communication outages or downtime.
+
+### D32: Strictly Trailing Integer Rolling Windows (1h, 6h, 24h)
+- **Context**: Temporal feature engineering is vulnerable to future leakage if centered windows or future shifts are applied.
+- **Decision**: All rolling features use strictly trailing integer windows (12, 72, and 288 intervals) on a regular 5-minute grid, requiring at least 50% valid observations.
+- **Consequences**: Guarantees zero look-ahead bias across all sliding-window statistics.
+
+### D33: Ground-Truth Label Isolation
+- **Context**: Inadvertent inclusion of failure indicators or scenario metadata in feature tables contaminates model evaluation.
+- **Decision**: Store all ground-truth failure windows, precursor intervals, and episode IDs exclusively in `data/processed/anomaly_eval_labels.parquet`. Sensor feature and operations tables strictly exclude target labels.
+- **Consequences**: Provides uncompromised ground-truth targets for Day 5 and Day 6 unsupervised and supervised model evaluation.
+
+### D34: Parquet-First Storage Standard with Dual-Format Operations Dataset
+- **Context**: Pipeline tables exceed 800,000 rows, making plain CSV storage slow and memory-intensive.
+- **Decision**: Persist all processed tables as compressed Parquet files. Generate `operations_dataset.csv` alongside `operations_dataset.parquet` as the single canonical tabular file for cross-platform EDA.
+- **Consequences**: Faster I/O throughput, reduced disk footprint, and automatic preservation of column data types.
+
+### D35: Retail Transactions Cleaning & Rejection Separation
+- **Context**: Retail transactions contain cancellations, non-product stock codes (e.g., `POST`), and unverified returns that distort financial KPIs.
+- **Decision**: Split transactions into clean kept records (`business_transactions.parquet`) and invalid rejections (`business_transactions_rejected.parquet`). Flag non-product lines and extreme quantities ($\ge 10,000$), excluding them from revenue and order velocity aggregations.
+- **Consequences**: Full financial auditability with non-destructive separation of anomalous and administrative records.
+
+### D36: PostgreSQL COPY Load inside Single Atomic Transaction
+- **Context**: Inserting hundreds of thousands of rows via standard SQL `INSERT` is prohibitively slow.
+- **Decision**: Execute database ingestion via PostgreSQL `COPY` (using TSV in-memory buffers) inside a single atomic transaction with foreign-key-safe ordering and post-load verification.
+- **Consequences**: Sub-minute database loading with complete rollback safety on failure.
+
+### D37: Strict UTC Time Reference Standard
+- **Context**: Mixing local time zones across plant locations causes off-by-one errors in daily aggregations.
+- **Decision**: Enforce UTC timestamps across all tables, defining daily aggregation boundaries strictly at 00:00 UTC.
+- **Consequences**: Consistent cross-table joins between high-frequency sensor readings and daily production logs.
+
+### D38: First 24-Hour Warmup Flagging
+- **Context**: Rolling features requiring trailing 24-hour windows are incomplete during the initial 288 intervals for each asset.
+- **Decision**: Explicitly flag the initial 288 intervals of each machine with `is_warmup = True` rather than dropping rows.
+- **Consequences**: Retains complete time series while allowing training pipelines to filter or adjust for initialization bias.
+
+### D39: Per-Machine Baseline Modeling Deferral
+- **Context**: Computing fleet-wide or per-machine normative baselines across the full timeline introduces data leakage.
+- **Decision**: Defer per-machine normative baselines (e.g., healthy-state deviation) to Day 5, where baselines are fit strictly on the early training partition.
+- **Consequences**: Fully complies with leakage prevention policy L3.
+
+### D40: Operations Dataset Complete-Day Filtering
+- **Context**: Partial days at the boundary of a dataset distort cumulative metrics like daily operating hours and energy.
+- **Decision**: Include only calendar days with complete 288-interval coverage in `operations_dataset.parquet`.
+- **Consequences**: Guarantees consistent daily totals for all machines across the active timeline.
+
+### D41: Strictly Past Maintenance Feature As-Of Timing (D + 1)
+- **Context**: Joining maintenance events on the day of maintenance can leak intervention details before work is completed.
+- **Decision**: A maintenance event occurring on date $D$ becomes visible to rolling features strictly on date $D + 1$.
+- **Consequences**: Ensures features reflect only historical, completed maintenance interventions.
+
+---
+
+## Next Steps (Handoff to Day 04: Exploratory Data Analysis)
+
+1. **Day 4 Goal:** Conduct thorough exploratory data analysis in `ml/notebooks/`:
+   - Production trends, machine health, temperature, vibration, downtime, energy consumption, and maintenance frequency.
+   - Retail business demand patterns and product sales velocity.
+   - Behavioral analysis leading up to real MetroPT failure windows on `M-104`.
+   - AI4I failure mode imbalance and correlation analysis.
+   - Export 8–10 key visualizations to `docs/figures/` and author `docs/eda_findings.md`.
+2. **Inputs Ready:**
+   - `data/processed/operations_dataset.csv` and `operations_dataset.parquet`
+   - `data/processed/sensor_features.parquet`
+   - `data/processed/anomaly_eval_labels.parquet` (used strictly for visual interpretation, never feature selection)
+   - `data/processed/business_features_daily.parquet` and `product_demand_daily.parquet`
+   - `docs/feature_catalog.md` and `docs/data_quality_report.md`
+3. **EDA Principles:**
+   - Analyze statistics on the early timeline partition for any metrics influencing Day 5 modeling decisions.
+   - Explicitly delineate findings from real data (M-104 and retail) versus synthetic dynamics.
+4. **Active Branch:** `feature/day-04-eda`.
