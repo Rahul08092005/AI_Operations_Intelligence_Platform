@@ -31,6 +31,16 @@ An enterprise-grade operational intelligence platform combining real-time anomal
                          │  - ai4i_state_raw.csv (10k rows)       │
                          └────────────────────┬───────────────────┘
                                               ▼
+                         ┌────────────────────────────────────────┐
+                         │ Day 3 Feature Store & Cleaning Engine  │
+                         │  - sensors.parquet (Tier 1 & Tier 2)   │
+                         │  - sensor_features.parquet (89 feats)  │
+                         │  - operations_dataset.parquet & .csv   │
+                         │  - anomaly_eval_labels.parquet         │
+                         │  - business_features_daily.parquet     │
+                         │  - product_demand_daily.parquet        │
+                         └────────────────────┬───────────────────┘
+                                              ▼
                     ┌───────────────────────────────────────────────────┐
                     │ PostgreSQL 16 Relational Schema / SQLAlchemy 2.0  │
                     └───────────────────────────────────────────────────┘
@@ -38,66 +48,62 @@ An enterprise-grade operational intelligence platform combining real-time anomal
 
 ---
 
-## Quickstart & Data Pipeline
+## Quickstart & One-Command Data Flow
 
-### Prerequisites
-- Python 3.11+ (Python 3.14 compatible)
-- Docker & Docker Compose (optional for PostgreSQL; SQLite fallback supported)
+The complete data engineering and ingestion workflow can be executed with a single command:
 
-### 1. Verify Source Archives
-Inspect the presence and schema of source datasets:
 ```bash
-python scripts/verify_sources.py
-# or: make verify-sources
+# Complete end-to-end data build: prepare raw, run Day 3 pipeline, load database
+make data
 ```
 
-### 2. Run Master Data Preparation Pipeline
-Generates all 7 standardized operational datasets with deterministic seed (`SEED=42`):
+### Modular Pipeline Targets
+
 ```bash
-python scripts/prepare_data.py --determinism
-# or: make data-raw
+# 1. Fast sample run (machines M-103 & M-104, trailing 45 days, ~10s runtime)
+make pipeline-sample
+
+# 2. Full fleet pipeline (12 machines, 214 days, outputs all 14 processed files)
+make pipeline
+
+# 3. Load processed data into PostgreSQL database via atomic COPY transaction
+make db-load
+
+# 4. Verify output raw datasets against integrity constraints
+make validate-raw
+
+# 5. Run full test suite (22 unit, integration, and leakage tests)
+make test
+
+# 6. Run linting and code quality checks
+make lint
 ```
 
-Available pipeline flags:
-- `--target <step>`: Run a single step (`verify_sources`, `machines`, `sensors`, `maintenance`, `production`, `retail`, `business`, `ai4i`, `validate`, or `all`).
-- `--skip-existing`: Skip generation if target outputs already exist.
-- `--determinism`: Verifies byte-level SHA-256 reproducibility across runs.
+### Python CLI Invocations
 
-### 3. Run Output Validation Suite
-Asserts row counts, foreign key integrity, temporal bounds, and operational scenario constraints:
 ```bash
-python scripts/validate_raw_outputs.py
-# or: make validate-raw
-```
-A human-readable summary report is written to `docs/raw_data_validation_report.txt`.
+# Activate Python 3.11+ virtual environment
+# Windows: .\.venv\Scripts\Activate.ps1 | Linux/macOS: source .venv/bin/activate
 
-### 4. Database Initialization
-Initialize all 8 relational tables:
-```bash
-# PostgreSQL (requires running container: docker compose up -d db)
-python scripts/init_db.py --load-data
+# Run pipeline in sample mode
+python scripts/run_pipeline.py --sample --skip-db
 
-# SQLite offline mode:
-python scripts/init_db.py --sqlite-fallback --load-data
-```
+# Run full fleet pipeline
+python scripts/run_pipeline.py --skip-db
 
-### 5. Run Test Suite
-```bash
-pytest tests/ -v
-# or: make test
+# Database loader (dry-run mode)
+python scripts/load_to_db.py --dry-run
 ```
 
 ---
 
 ## Documentation Index
 
-- [Data Dictionary](docs/data_dictionary.md): Field-level descriptions, units, and valid ranges for all operational tables.
+- [Data Engineering Pipeline Specification](docs/data_pipeline.md): End-to-end pipeline architecture, leakage prevention rules (L1–L5), and step execution policies.
+- [Data Quality & Audit Report](docs/data_quality_report.md): Automated quality metrics, missing value imputation logs, outlier rates, and anomaly preservation verification.
+- [Feature Catalog](docs/feature_catalog.md): Complete catalog of 89 engineered sensor features, mathematical definitions, rolling windows, and leakage classifications.
+- [Data Dictionary](docs/data_dictionary.md): Field-level descriptions, data types, units, and nullability contracts for raw and processed operational tables.
 - [Data Mapping Specification](docs/data_mapping.md): Transformation rules, whole-week time shifts, and synthetic signal derivations.
-- [Architecture Decision Records](docs/architecture.md): Formal design decisions (D01 through D28).
+- [Architecture Decision Records](docs/architecture.md): Formal design decisions (D01 through D41) and Day 4 handoff.
 - [Day 2 Walkthrough Report](docs/day02_walkthrough.md): Comprehensive Day 2 deliverables, verification results, and acceptance checklists.
-
----
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- [Day 3 Walkthrough Report](docs/day03_walkthrough.md): Comprehensive Day 3 data pipeline deliverables, sanity checks, and benchmark execution metrics.

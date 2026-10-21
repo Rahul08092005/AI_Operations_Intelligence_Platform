@@ -195,3 +195,184 @@ The target schema generated on Day 2 and stored under `data/raw/unified/`:
 - `description` (str, extension): Product description
 - `country` (str, extension): Destination country
 
+---
+
+## 6. Processed Operational Datasets (`data/processed/`)
+
+All processed tables are stored as compressed Parquet files unless noted otherwise. All timestamps are normalized to UTC.
+
+### 6.1 `machines.parquet`
+- **Grain:** Machine (`machine_id`)
+- **Key Columns:** `machine_id`
+- **Columns:**
+  - `machine_id` (string / category, PK): Machine identifier (`M-101` to `M-112`)
+  - `machine_type` (string): Industrial equipment classification
+  - `location` (string): Factory plant and production line
+  - `installation_date` (date): Date of installation
+  - `status` (string): Final timeline operational status
+  - `data_origin` (string): Real or derived sensor pedigree
+  - `scenario` (string): Simulation scenario assignment
+  - `ai4i_type` (string): Quality variant classification
+
+### 6.2 `sensors.parquet`
+- **Grain:** Machine $\times$ 5-minute interval
+- **Key Columns:** `machine_id`, `timestamp`
+- **Columns:**
+  - `timestamp` (datetime64[ns, UTC]): Regular 5-minute sampling timestamp
+  - `machine_id` (category): Machine identifier
+  - `temperature` (float32, °C, nullable): Bearing/oil operating temperature
+  - `vibration` (float32, mm/s, nullable): RMS vibration velocity
+  - `pressure` (float32, bar, nullable): Discharge line pressure
+  - `rpm` (float32, rev/min, nullable): Rotational spindle speed
+  - `energy_consumption` (float32, kWh, nullable): 5-minute electrical energy consumption
+  - `operating_hours` (float32, hours): Cumulative non-decreasing operating hours
+  - `motor_current` (float32, A, nullable): Motor phase current
+  - `comp_state` (float32, binary, nullable): Compressor load state (0=load, 1=offload)
+  - `running` (float32, binary): Operational running state indicator ($I_t > 1.55\text{ A}$)
+  - `is_gap` (bool): Flag indicating explicit missing telemetry gap row
+  - `is_imputed` (bool): Flag indicating bounded forward-fill or linear interpolation ($\le 15$ min)
+  - `is_sensor_fault` (bool): Flag indicating Tier 1 hard physical limit violation
+  - `is_outlier_flag` (bool): Flag indicating Tier 2 statistical outlier ($|Z| > 6.0$)
+  - `outlier_signals` (string): Comma-separated list of signals triggering Tier 2 flags
+  - `is_warmup` (bool): Flag indicating first 24 hours of operation per machine
+
+### 6.3 `sensor_features.parquet`
+- **Grain:** Machine $\times$ 5-minute interval
+- **Key Columns:** `machine_id`, `timestamp`
+- **Columns:** Contains all columns from `sensors.parquet` plus 89 engineered features across 5 groups:
+  - **Base Signals:** Current clean sensor readings and operating states.
+  - **Rolling Statistics:** Trailing means, standard deviations, and maximums over 1h (12 intervals), 6h (72 intervals), and 24h (288 intervals) for `temperature`, `vibration`, `pressure`, `rpm`, `energy_consumption`, and `motor_current`.
+  - **Trends & Slopes:** Rate-of-change deltas over 1h and 24h; 24h least-squares regression slopes (`vibration_slope_24h`, `temperature_slope_24h`).
+  - **Operating Context:** Trailing running ratios (`running_ratio_1h`, `running_ratio_24h`), compressor load ratios (`load_ratio_1h`), and threshold exceedance indicators (`vibration_above_warning`, `vibration_above_critical`, `temperature_above_spec`).
+  - **Maintenance As-Of Join (Strictly Past $D+1$):** `days_since_maintenance`, `days_since_inspection`, `days_since_preventive`, `operating_hours_since_inspection`, `operating_hours_since_preventive`, `hours_since_estimated`, `inspection_overdue`, `preventive_overdue`, `maintenance_count`, `maintenance_count_90d`, `maintenance_cost_avg`, `maintenance_cost_90d`, `failure_count`, `days_since_failure`, `previous_failure`.
+
+### 6.4 `maintenance.parquet`
+- **Grain:** Maintenance Event
+- **Key Columns:** `maintenance_id`
+- **Columns:**
+  - `maintenance_id` (string, PK): Unique work order reference
+  - `machine_id` (category, FK): Serviced equipment ID
+  - `maintenance_type` (string): Capitalized type (`Inspection`, `Preventive`, `Corrective`)
+  - `scheduled_date` (datetime64[ns, UTC]): Scheduled work date
+  - `performed_date` (datetime64[ns, UTC]): Execution date
+  - `duration_hours` (float32, hours): Duration of maintenance
+  - `cost_gbp` (float32, GBP): Direct cost of parts and labor
+  - `parts_replaced` (string, JSON): JSON list of replaced parts
+  - `technician_notes` (string): Unstructured narrative notes
+  - `root_cause` (string): Diagnostic root cause
+  - `failure_type` (string): Standardized failure mode (`Air Leak`, `Tool Wear`, or `None`)
+  - `created_at` (datetime64[ns, UTC]): Record creation timestamp
+
+### 6.5 `production.parquet`
+- **Grain:** Machine $\times$ Day
+- **Key Columns:** `machine_id`, `date`
+- **Columns:**
+  - `production_id` (string, PK): Production log reference
+  - `date` (datetime64[ns, UTC]): Production date (00:00 UTC)
+  - `machine_id` (category, FK): Machine identifier
+  - `shift` (string): Shift identifier
+  - `production_quantity` (int32, units): Actual units produced
+  - `target_quantity` (int32, units): Target planned units
+  - `scrap_units` (int32, units): Defective units scrapped
+  - `operating_hours` (float32, hours): Operating time in hours
+  - `downtime_minutes` (float32, minutes): Unscheduled downtime in minutes
+  - `downtime_reason` (string): Categorical reason for downtime
+  - `oee` (float32, ratio): Overall Equipment Effectiveness (0.0 to 1.0)
+  - `created_at` (datetime64[ns, UTC]): Timestamp of entry
+
+### 6.6 `business_daily.parquet`
+- **Grain:** Day (Company / Plant level)
+- **Key Columns:** `date`
+- **Columns:**
+  - `date` (datetime64[ns, UTC]): Reporting date (00:00 UTC)
+  - `plant_id` (string): Plant identifier (`PLANT-GLOBAL`)
+  - `total_production_units` (int32, units): Total units produced across fleet
+  - `total_scrap_units` (int32, units): Total scrap units
+  - `total_operating_hours` (float32, hours): Fleet operating hours
+  - `total_downtime_hours` (float32, hours): Fleet downtime hours
+  - `total_energy_kwh` (float32, kWh): Factory electrical energy consumption
+  - `energy_cost_gbp` (float32, GBP): Total energy cost
+  - `maintenance_cost_gbp` (float32, GBP): Total direct maintenance cost
+  - `revenue_gbp` (float32, GBP): Factory gross revenue
+  - `inventory_level` (int32, units): End-of-day finished goods inventory
+  - `backorder_units` (int32, units): Unfulfilled customer orders
+  - `created_at` (datetime64[ns, UTC]): Timestamp
+
+### 6.7 `business_transactions.parquet`
+- **Grain:** Invoice Line
+- **Key Columns:** `transaction_id`
+- **Columns:**
+  - `transaction_id` (string, PK): Unique transaction identifier
+  - `invoice_no` (string): Original invoice code (e.g. `536365`, `C536379`)
+  - `stock_code` (string): Product SKU code
+  - `product_id` (string): Standardized product identifier
+  - `description` (string): Item description
+  - `quantity` (int32, units): Transacted units (positive for sales, negative for returns)
+  - `unit_price` (float32, GBP): Unit price in GBP (> 0.0)
+  - `customer_id` (string, nullable): Customer account reference
+  - `country` (string): Destination country
+  - `date` (datetime64[ns, UTC]): Transaction timestamp (00:00 UTC)
+  - `is_cancellation` (bool): True if invoice begins with 'C'
+  - `is_return` (bool): True if quantity < 0
+  - `is_guest` (bool): True if customer_id is null
+  - `is_non_product` (bool): True if stock code matches administrative codes
+  - `is_extreme_quantity` (bool): True if $|quantity| \ge 10,000$
+  - `revenue_clean` (float32, GBP): Clean net revenue for KPI calculations
+
+### 6.8 `business_transactions_rejected.parquet`
+- **Grain:** Invoice Line
+- **Key Columns:** `transaction_id`
+- **Columns:** Same structure as transactions with added `reject_reason` (`non_positive_price`, `missing_required_fields`, `duplicate_transaction_id`).
+
+### 6.9 `business_features_daily.parquet`
+- **Grain:** Day (Company level)
+- **Key Columns:** `date`
+- **Columns:**
+  - `date` (datetime64[ns, UTC]): Calendar date (00:00 UTC)
+  - `daily_sales` (int32, units): Net positive sales volume
+  - `daily_returns_units` (int32, units): Volume of returned units
+  - `revenue` (float32, GBP): Net clean revenue
+  - `daily_orders` (int32, count): Count of distinct sales invoices
+  - `daily_customers` (int32, count): Count of distinct non-guest customers
+  - `average_order_value` (float32, GBP): Average transaction value per order
+  - `weekly_sales` (float32, units): Trailing 7-day cumulative sales
+  - `monthly_sales` (float32, units): Trailing 30-day cumulative sales
+  - `sales_growth` (float32, ratio): 7-day sales growth velocity ratio
+
+### 6.10 `product_demand_daily.parquet`
+- **Grain:** Product $\times$ Day
+- **Key Columns:** `date`, `product_id`
+- **Columns:**
+  - `date` (datetime64[ns, UTC]): Date (00:00 UTC)
+  - `product_id` (string): SKU identifier for top 50 revenue products
+  - `description` (string): Primary product description
+  - `units` (int32, units): Daily units ordered
+  - `revenue` (float32, GBP): Daily product revenue
+
+### 6.11 `operations_dataset.parquet` and `operations_dataset.csv`
+- **Grain:** Machine $\times$ Day
+- **Key Columns:** `machine_id`, `date`
+- **Description:** Canonical enterprise operations dataset integrating daily sensor statistics, equipment maintenance history, factory production outputs, and enterprise retail demand signals.
+- **Columns (72 total):**
+  - **Keys & Machine Metadata:** `machine_id`, `date`, `machine_type`, `location`, `installation_date`, `machine_age_days`.
+  - **Production Metrics:** `production_quantity`, `target_quantity`, `downtime_minutes`, `production_lag_1`, `production_lag_7`, `production_roll_mean_7d`, `downtime_roll_mean_7d`.
+  - **Business & Inventory Context:** `orders`, `inventory`, `maintenance_cost_day`, `retail_daily_sales`, `retail_revenue`, `retail_daily_orders`, `retail_daily_customers`, `retail_aov`, `retail_weekly_sales`, `retail_monthly_sales`, `retail_sales_growth`, `orders_lag_1`.
+  - **Daily Sensor Aggregates:** `temperature_mean`, `temperature_max`, `temperature_std`, `vibration_mean`, `vibration_max`, `vibration_std`, `pressure_mean`, `pressure_max`, `pressure_std`, `rpm_mean`, `rpm_max`, `rpm_std`, `energy_kwh`, `motor_current_mean`, `operating_hours_end`, `running_hours`, `vibration_above_warning_minutes`, `vibration_above_critical_minutes`, `temperature_above_spec_minutes`, `sensor_coverage`, `imputed_share`, `outlier_flag_share`, `vibration_roll_mean_24h_end`, `temperature_roll_mean_24h_end`, `vibration_slope_24h_end`.
+  - **Start-of-Day Maintenance Context ($D+1$ As-Of):** `days_since_maintenance`, `days_since_inspection`, `days_since_preventive`, `operating_hours_since_inspection`, `operating_hours_since_preventive`, `hours_since_estimated`, `inspection_overdue`, `preventive_overdue`, `maintenance_count`, `maintenance_count_90d`, `maintenance_cost_avg`, `maintenance_cost_90d`, `failure_count`, `days_since_failure`, `previous_failure`.
+  - **Same-Day Maintenance Indicator:** `maintenance_event_today` (binary 0/1), `maintenance_type_today` (`Inspection`, `Preventive`, `Corrective`, or `None`).
+  - **Calendar Flags:** `day_of_week` (0=Monday to 6=Sunday), `is_weekend` (0/1), `month` (1 to 12).
+
+### 6.12 `anomaly_eval_labels.parquet`
+- **Grain:** Machine $\times$ 5-minute interval
+- **Key Columns:** `machine_id`, `timestamp`
+- **Columns:**
+  - `machine_id` (string): Machine identifier
+  - `timestamp` (datetime64[ns, UTC]): 5-minute interval timestamp
+  - `in_failure_window` (bool): True during authentic failure windows on `M-104` or injected episodes
+  - `in_precursor_window` (bool): True during 72-hour precursor windows before failure events
+  - `failure_window_id` (string, nullable): Event identifier (`FAIL-001` to `FAIL-004`)
+  - `episode_type` (string): Classification (`normal`, `air_leak_catastrophic`, `precursor_degradation`, `synthetic_episode`)
+  - `episode_id` (string, nullable): Synthetic episode identifier
+  - `label_source` (string): Source provenance (`metropt_real_event` or `synthetic`)
+
+
