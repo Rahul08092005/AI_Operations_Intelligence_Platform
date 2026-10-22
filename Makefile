@@ -1,4 +1,4 @@
-.PHONY: verify-sources inspect-data data-raw validate-raw db-init db-load pipeline pipeline-sample data test lint format clean help
+.PHONY: verify-sources inspect-data data-raw validate-raw db-init db-load pipeline pipeline-sample data test lint format clean eda-run eda-test eda-strip help
 
 PYTHON ?= python
 
@@ -16,6 +16,9 @@ help:
 	@echo "  test            : Run pytest test suite"
 	@echo "  lint            : Check code quality with ruff"
 	@echo "  format          : Format code with ruff"
+	@echo "  eda-run         : Execute all 6 EDA notebooks via jupyter nbconvert"
+	@echo "  eda-test        : Run EDA test suite (tests/test_eda.py)"
+	@echo "  eda-strip       : Strip outputs from EDA notebooks (nbstripout)"
 	@echo "  clean           : Remove temporary cache files"
 
 verify-sources:
@@ -59,3 +62,18 @@ clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
 	find . -type d -name ".ruff_cache" -exec rm -rf {} +
+
+eda-run:
+	$(PYTHON) -m jupyter nbconvert --execute --inplace ml/notebooks/01_overview_and_lineage.ipynb
+	$(PYTHON) -m jupyter nbconvert --execute --inplace ml/notebooks/02_production_downtime_energy.ipynb
+	$(PYTHON) -m jupyter nbconvert --execute --inplace ml/notebooks/03_sensors_machine_health.ipynb
+	$(PYTHON) -m jupyter nbconvert --execute --inplace ml/notebooks/04_maintenance_and_failures.ipynb
+	$(PYTHON) -m jupyter nbconvert --execute --inplace ml/notebooks/05_retail_demand_and_baselines.ipynb
+	$(PYTHON) -m jupyter nbconvert --execute --inplace ml/notebooks/06_ai4i_failure_data.ipynb
+
+eda-test:
+	$(PYTHON) -m pytest tests/test_eda.py -v
+
+eda-strip:
+	$(PYTHON) -m nbstripout ml/notebooks/01_overview_and_lineage.ipynb ml/notebooks/02_production_downtime_energy.ipynb ml/notebooks/03_sensors_machine_health.ipynb ml/notebooks/04_maintenance_and_failures.ipynb ml/notebooks/05_retail_demand_and_baselines.ipynb ml/notebooks/06_ai4i_failure_data.ipynb
+

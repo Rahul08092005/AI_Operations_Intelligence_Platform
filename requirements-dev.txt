@@ -9,3 +9,5 @@ ipykernel>=6.29
 matplotlib>=3.9
 seaborn>=0.13
 plotly>=5.23
+statsmodels>=0.14
+nbstripout>=0.7

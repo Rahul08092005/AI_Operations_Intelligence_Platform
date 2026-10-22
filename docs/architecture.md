@@ -184,23 +184,86 @@
 - **Decision**: A maintenance event occurring on date $D$ becomes visible to rolling features strictly on date $D + 1$.
 - **Consequences**: Ensures features reflect only historical, completed maintenance interventions.
 
+### D42: Modular Notebook Layout & Helper Architecture
+- **Context**: A single monolithic exploratory data analysis notebook becomes bloated, difficult to navigate, and prone to unreproducible execution states.
+- **Decision**: Partition EDA into 6 focused notebooks (`01_overview_and_lineage.ipynb` through `06_ai4i_failure_data.ipynb`) backed by a shared helper package in `ml/eda/` (`config.py`, `load.py`, `splits.py`, `plotting.py`, `stats.py`).
+- **Consequences**: Highly modular, maintainable, and independently executable analysis modules backed by automated unit tests in `tests/test_eda.py`.
+
+### D43: Notebook Output Stripping via nbstripout
+- **Context**: Committing rich notebook outputs (base64 image payloads, JSON metadata) creates massive Git diffs and bloats repository size.
+- **Decision**: Install `nbstripout` as a Git pre-commit filter, committing notebooks in a clean state (code and markdown only), while exporting publication-quality figures directly to `docs/figures/`.
+- **Consequences**: Clean Git history, minimal repository footprint, and reproducible, self-contained visual artifacts.
+
+### D44: Chronological 70/30 Exploration vs. Holdout Partitioning
+- **Context**: Selecting features, tuning anomaly thresholds, or deriving operational baselines on the full operational horizon introduces lookahead bias and overfits downstream evaluations.
+- **Decision**: Establish an immutable chronological split: Exploration period = first 70% of days (first 150 days, cutoff `2026-08-17 00:00 UTC`), Holdout period = remaining 30% (last 64 days). All modeling choices for Days 5, 6, and 8 must be derived strictly from the exploration partition.
+- **Consequences**: Completely shields the holdout period for uncompromised out-of-time evaluation in downstream modeling phases.
+
+### D45: Evaluation Labels Strictly for Interpretation
+- **Context**: Using supervised failure labels (`anomaly_eval_labels.parquet`) to rank or select features for unsupervised anomaly detection constitutes severe label leakage.
+- **Decision**: Restrict evaluation labels exclusively to visual interpretation (event studies, timeline shading, and empirical base rate reporting). Under no circumstances may labels guide feature selection or threshold calibration.
+- **Consequences**: Guarantees true unsupervised integrity for Day 5 anomaly models.
+
+### D46: Stratified AI4I Train/Test Split Quarantining
+- **Context**: Evaluating machine failure prediction models without a fixed, pre-allocated test set risks cross-validation leakage and data snooping.
+- **Decision**: Generate an immutable 80/20 train/test stratified split index (`data/processed/ai4i_split_index.csv`, seed 42) based on `machine_failure`. EDA investigates the training partition only (8,000 rows); the test partition (2,000 rows) remains strictly quarantined for Day 6 final evaluation.
+- **Consequences**: Prevents optimistic bias and establishes a rigorous, uncompromised test bed for failure classification.
+
+### D47: Mandatory Provenance Tagging on All Findings
+- **Context**: Blending real physical data (MetroPT compressor signals, Online Retail transactions) with algorithmic derivations creates risk of presenting synthetic artifacts as physical operational insights.
+- **Decision**: Mandate explicit provenance tags on all findings and documentation: `[REAL]`, `[REAL-DERIVED]`, `[SYNTHETIC-BY-DESIGN]`, and `[MIXED]`.
+- **Consequences**: Enforces intellectual honesty and clear industrial domain boundaries for all analytical conclusions.
+
+### D48: Block Bootstrap Confidence Intervals for Autocorrelated Series
+- **Context**: Industrial sensor streams and retail demand series exhibit strong temporal autocorrelation. Conventional i.i.d. bootstrap methods severely underestimate standard errors and produce overconfident confidence intervals.
+- **Decision**: Employ moving-block bootstrap techniques (block lengths of 7 days for daily series, 24 hours for hourly series) to estimate uncertainty for all operational effect sizes and trend statistics.
+- **Consequences**: Robust, statistically sound uncertainty intervals that account for temporal dependency.
+
+### D49: Parquet-First Data Ingestion for Analytical Pipelines
+- **Context**: Querying PostgreSQL for high-frequency analytical workflows introduces external infrastructure dependencies, connection overhead, and slower I/O.
+- **Decision**: Direct all EDA notebooks and analytical loaders to read partitioned Parquet files directly from `data/processed/` using PyArrow column selection and memory mapping.
+- **Consequences**: Blazing fast analytical read times (< 2 seconds per notebook) without requiring a running database server.
+
+### D50: Rolling-Origin Baseline Benchmarking inside Exploration Slice
+- **Context**: Time series forecasting models on Day 8 require realistic, unpeeking baseline benchmarks to beat.
+- **Decision**: Compute naive, seasonal naive, and 7-day moving average baselines using rolling-origin 7-day evaluation across the final 28 days of the exploration partition (`2026-07-20` to `2026-08-16`).
+- **Consequences**: Provides uncompromised target metrics (e.g., Fleet Production MA-7 MAE 1,026.8 units) without touching the holdout window.
+
+### D51: Unified Plotting & Visualization Design Standards
+- **Context**: Inconsistent figure aesthetics, unreadable font sizes, and inaccessible color palettes degrade the professional quality of operational reports.
+- **Decision**: Enforce a standardized plotting style in `ml/eda/plotting.py` utilizing the Okabe-Ito colorblind-safe palette, 150 DPI resolution, consistent font hierarchies, and structured multi-panel layouts exported to `docs/figures/fig01_*.png` through `fig10_*.png`.
+- **Consequences**: Cohesive, publication-grade figures suitable for executive dashboards and technical reports.
+
+### D52: Immutability of Processed Data During Exploratory Analysis
+- **Context**: Modifying or "fixing" processed data during EDA compromises pipeline determinism and breaks traceability.
+- **Decision**: Treat `data/raw/` and `data/processed/` as strictly read-only during EDA (Rule R1). Data generator design deviations are logged in `docs/known_issues.md` rather than patched in-flight.
+- **Consequences**: Complete reproducibility and strict separation of concerns between data engineering and data analysis.
+
 ---
 
-## Next Steps (Handoff to Day 04: Exploratory Data Analysis)
+## Next Steps (Handoff to Day 05: Anomaly Detection)
 
-1. **Day 4 Goal:** Conduct thorough exploratory data analysis in `ml/notebooks/`:
-   - Production trends, machine health, temperature, vibration, downtime, energy consumption, and maintenance frequency.
-   - Retail business demand patterns and product sales velocity.
-   - Behavioral analysis leading up to real MetroPT failure windows on `M-104`.
-   - AI4I failure mode imbalance and correlation analysis.
-   - Export 8–10 key visualizations to `docs/figures/` and author `docs/eda_findings.md`.
-2. **Inputs Ready:**
-   - `data/processed/operations_dataset.csv` and `operations_dataset.parquet`
-   - `data/processed/sensor_features.parquet`
-   - `data/processed/anomaly_eval_labels.parquet` (used strictly for visual interpretation, never feature selection)
-   - `data/processed/business_features_daily.parquet` and `product_demand_daily.parquet`
-   - `docs/feature_catalog.md` and `docs/data_quality_report.md`
-3. **EDA Principles:**
-   - Analyze statistics on the early timeline partition for any metrics influencing Day 5 modeling decisions.
-   - Explicitly delineate findings from real data (M-104 and retail) versus synthetic dynamics.
-4. **Active Branch:** `feature/day-04-eda`.
+1. **Day 4 Accomplishments:**
+   - Completed all 13 EDA tasks, delivering 6 reproducible notebooks in `ml/notebooks/` (outputs stripped via `nbstripout`).
+   - Answered all 47 Exploratory Questions (EQ1 to EQ47) with quantitative evidence and bootstrap confidence intervals.
+   - Generated 10 publication-quality curated figures (`fig01_*.png` through `fig10_*.png`) in `docs/figures/`.
+   - Delivered `docs/eda_findings.md`, `docs/known_issues.md`, and `docs/day04_walkthrough.md`.
+   - Helper package `ml/eda/` fully tested and verified by `pytest tests/test_eda.py`.
+
+2. **Day 5 Modeling Scope (Isolation Forest Anomaly Detection):**
+   - **Candidate Feature Shortlist:** `motor_current`, `temperature`, `pressure`, `rpm`, `energy_consumption`, `vibration`, along with 24-hour trailing rolling means, standard deviations, and least-squares slopes (DEC-01).
+   - **Training Set Construction:** Fit Isolation Forest models strictly on the exploration period (first 70% of days), explicitly excluding known failure windows and scenario degradation episodes (DEC-02).
+   - **Dual Evaluation Protocol on M-104 (Mandatory):** Evaluate M-104 anomaly scoring twice:
+     1. On all features (including synthetic vibration and temperature overlay).
+     2. On **real-only features** (`pressure`, `motor_current`, `comp_state`, and native MetroPT channels).
+     *Note:* Modelers must report both sets of results honestly; (a) alone must never be claimed as real-world detection capability (DEC-03, Caveat C3).
+   - **Operational Threshold Proposals:** Implement proposed warning thresholds derived from exploration-period healthy quantiles ($p99.9$): Air Compressor Vibration: 4.0 mm/s (warning), 7.0 mm/s (critical); Temperature: 80.0 °C (warning), 85.0 °C (critical) (Section 6, `docs/eda_findings.md`).
+   - **Contamination Parameter:** Set Isolation Forest contamination parameter in the range **0.01 to 0.05 (recommended: 0.03)**. Do NOT set contamination to 32% (which reflects benign intraday duty switching, not physical faults) (DEC-02).
+   - **False Positive Stress Test:** Use machine `M-109` (benign vibration spikes) as a benchmark; ensure critical alert rate on M-109 is $< 5\%$ (DEC-04).
+
+3. **Downstream Directives (Days 6 & 8):**
+   - **Day 6 (Failure Prediction):** Re-use `data/processed/ai4i_split_index.csv`. Strictly drop mode flags (`twf`, `hdf`, `pwf`, `osf`, `rnf`) and identifiers (`udi`, `product_id`). Report PR-AUC against baseline 0.0339 (DEC-05 to DEC-07).
+   - **Day 8 (Forecasting):** Apply 7-day seasonal differencing ($D=1$). Target beating MA-7 baseline MAE $\le 1,026.8$ units on fleet production (DEC-08, DEC-09).
+
+4. **Active Branch for Day 5:** `feature/day-05-anomaly-detection`.
+

@@ -192,3 +192,29 @@ python scripts/load_to_db.py --dry-run
 # Database loader (active COPY transaction)
 python scripts/load_to_db.py
 ```
+
+---
+
+## 8. Downstream Analytical Consumers & Usability Notes
+
+The processed Parquet dataset produced by this pipeline serves as the foundational data layer for Day 4 Exploratory Data Analysis (EDA) and subsequent machine learning modeling phases (Days 5, 6, and 8). Full-scale consumer auditing during EDA demonstrated high table usability, strict temporal alignment, and robust numerical stability:
+
+1. **`operations_dataset.parquet` (Daily Fleet KPIs):**
+   - **Usability:** Acts as the primary table for cross-asset production, downtime drivers, efficiency tracking, and maintenance intervals.
+   - **Verification:** Row-level equality check (EQ4) confirmed exact mathematical alignment with `production.parquet` (0 discrepancies across all 2,556 machine-days).
+   - **Caveat:** Total operating hours per machine across the 7-month horizon (~3,400h) yields sparse multi-cycle preventive maintenance intervals (see `docs/known_issues.md` KI-03).
+
+2. **`sensors.parquet` (Cleaned 5-Minute Telemetry):**
+   - **Usability:** 736,128 regular 5-minute intervals across 12 machines. Zero Tier 1 physical hard range violations and only 1 single interpolated interval (0.0001% missingness rate).
+   - **Verification:** Clean time grid confirmed; real failure windows on `M-104` are 100% intact without artificial data gaps.
+
+3. **`sensor_features.parquet` (Engineered Features & Signals):**
+   - **Usability:** PyArrow columnar projection allows loading specific rolling feature sets without loading the entire 89-column dataset into memory.
+   - **Verification:** Warmup intervals (`is_warmup = True` for initial 288 rows per machine) and strictly past maintenance as-of timing ($D+1$) correctly eliminate lookahead bias.
+
+4. **`business_features_daily.parquet` & `product_demand_daily.parquet` (Retail Commercial):**
+   - **Usability:** Successfully filters out cancellation lines, guest checkout noise, and administrative SKUs. Captures authentic UK holiday retail demand surges and regular Sunday closures.
+
+5. **`anomaly_eval_labels.parquet` (Evaluation Labels):**
+   - **Usability:** Governed by Decision D45; strictly reserved for event study shading and base rate quantification. Never used for feature selection or pipeline transformation.
+
