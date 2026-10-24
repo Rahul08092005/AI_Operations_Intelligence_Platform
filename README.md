@@ -8,7 +8,7 @@ An enterprise-grade operational intelligence platform combining real-time anomal
 
 ```
                                ┌────────────────────────────────┐
-                               │  Smart Factory Fleet (12 M/Cs) │
+                               │  Smart Factory Fleet(12 M/Cs) │
                                └──────────────┬─────────────────┘
                                               │
                     ┌─────────────────────────┼─────────────────────────┐
