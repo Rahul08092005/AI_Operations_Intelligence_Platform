@@ -264,7 +264,7 @@ class AnomalyDetector:
             can_score, _ = scoring_mask(features_df, self.feature_list)
 
         # Pre-allocate factor columns
-        res: dict[str, Any] = {}
+        res = pd.DataFrame(index=features_df.index)
         for rank in range(1, top_k + 1):
             res[f"factor_{rank}"] = pd.Series([None] * n, index=features_df.index, dtype="string")
             res[f"factor_{rank}_z"] = pd.Series(np.nan, index=features_df.index, dtype=np.float32)
@@ -274,7 +274,7 @@ class AnomalyDetector:
 
         scored_idx = can_score.to_numpy()
         if not np.any(scored_idx):
-            return pd.DataFrame(res, index=features_df.index)
+            return res
 
         scored_df = features_df.loc[scored_idx]
         z_df = self.baseline.transform(scored_df)[self.feature_list]
@@ -297,9 +297,9 @@ class AnomalyDetector:
             rank_dirs = np.where(rank_z >= 0, "high", "low")
 
             r_num = rank + 1
-            res[f"factor_{r_num}"].loc[orig_scored_indices] = rank_feats
-            res[f"factor_{r_num}_z"].loc[orig_scored_indices] = rank_z
-            res[f"factor_{r_num}_direction"].loc[orig_scored_indices] = rank_dirs
+            res.loc[orig_scored_indices, f"factor_{r_num}"] = rank_feats
+            res.loc[orig_scored_indices, f"factor_{r_num}_z"] = rank_z
+            res.loc[orig_scored_indices, f"factor_{r_num}_direction"] = rank_dirs
 
         return pd.DataFrame(res, index=features_df.index)
 
