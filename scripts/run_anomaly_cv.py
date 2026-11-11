@@ -15,10 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import pandas as pd
+import pandas as pd  # noqa: E402
 
-from ml.anomaly_detection.config import PROCESSED_DIR
-from ml.anomaly_detection.experiments import (
+from ml.anomaly_detection.config import PROCESSED_DIR  # noqa: E402
+from ml.anomaly_detection.experiments import (  # noqa: E402
     run_cv_experiments,
     select_primary,
     select_real_only,
