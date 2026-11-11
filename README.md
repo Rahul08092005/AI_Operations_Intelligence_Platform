@@ -145,8 +145,45 @@ All modeling decisions, operational threshold proposals, and baseline benchmarks
 
 ---
 
+## Phase 3: Fleet Equipment Anomaly Detection (Day 5)
+
+An unsupervised, fleet-wide anomaly detection system delivering early equipment degradation warnings while strictly controlling false alarms.
+
+### Architectural Highlights
+- **Single Global Model with Per-Machine Baselines ([D53](docs/architecture.md#d53-single-global-isolation-forest-with-per-machine-robust-normalization)):** An Isolation Forest trained across 12 fleet machines using per-machine robust median and MAD normalization.
+- **Operating State Gating ([D54](docs/architecture.md#d54-operating-state-gating-and-masking)):** Anomaly scoring is restricted strictly to active running telemetry (state == 'Running'); stopped or unmonitored intervals are safely categorized as Offline / NoData.
+- **Pre-Registration & Cryptographic Freeze ([D64](docs/architecture.md#d64-pre-registration-and-cryptographic-configuration-freezing)):** Configuration, model artifact hashes, and hyperparameter selections were frozen before single-run holdout evaluation (models/anomaly_config_frozen.json).
+- **Intellectual Honesty Mandate (Caveats C1 & C3):** All detection metrics are reported side-by-side with an authentic real-signal-only comparator (IF-25, Set D).
+
+### Performance Scorecard (Holdout Evaluation)
+
+| Metric | Primary Model (IF-06, 5 core features) | Real-Only Comparator (IF-25, 11 real features) |
+|---|---|---|
+| **Holdout False Alarm Rate** | **0.586 Warning FA / 30d** (Budget $\le 1.0$) | **0.391 Warning FA / 30d** (Budget $\le 1.0$) |
+| **Critical False Alarms** | **0** (Budget: 0) | **0** (Budget: 0) |
+| **M-109 Benign Spike Audit** | 0 Critical, 0.469 Warn FA/30d | 0 Critical, 0.000 Warn FA/30d |
+| **M-104 Real Failure Detection** | **1 / 1 Detected** (Early, 71.9h lead time) | **0 / 1 Detected** (Missed, peak score 0.0000) |
+| **Synthetic Holdout Episodes** | **4 / 5 Detected** (80.0% Recall) | **0 / 5 Detected** (0.0% Recall) |
+| **Holdout Average Precision** | **0.655** [95% CI: 0.621, 0.688] | **0.078** [95% CI: 0.052, 0.109] |
+
+### Key Anomaly Visualizations
+
+#### Cross-Validation Hyperparameter Selection & Budget Audit
+![Anomaly CV Selection](docs/figures/fig11_anomaly_cv_selection.png)
+*Figure 11: Cross-validation hyperparameter selection showing the Pareto frontier between validation failure recall and false alarm rate per 30 days across 30 Isolation Forest variants, highlighting the selected primary model IF-06 satisfying the false alarm budget.*
+
+### Crucial Caveats & Intellectual Honesty Statement
+> **Caveat C3 (Detection Driver):** While the primary model (IF-06) successfully detects the M-104 compressor failure window with 71.9 hours of lead time, detection is driven primarily by synthetic overlays on vibration and temperature (+60% ramp). When evaluated strictly on native physical channels (IF-25, Set D: pressure, motor current, air consumption), detection recall drops to 0.0%. Both models are reported transparently side-by-side to maintain scientific integrity.
+
+---
+
 ## Documentation Index
 
+- [Anomaly Detection Technical Report](docs/anomaly_detection.md): Architecture, state gating, CV selection, holdout evaluation, factor attribution, and caveats C1–C7.
+- [Model Card: Anomaly Detector](docs/model_card_anomaly.md): Formal model card documenting intended use, limitations, performance, and retraining protocol.
+- [Holdout Evaluation Audit Log](docs/holdout_log.md): Single-run holdout execution record and cryptographic artifact hashes.
+- [Day 5 Walkthrough Report](docs/day05_walkthrough.md): Comprehensive Day 5 deliverables, test outputs, and Day 6 handoff.
+- [Methodology Specification](docs/methodology.md): Overarching platform modeling principles, evaluation protocols, and governance rules.
 - [EDA Findings & Modeling Decisions](docs/eda_findings.md): Comprehensive findings register for all 47 questions, architectural caveats (C1–C8), threshold proposals, and Day 5/6/8 decision register.
 - [Known Issues & Lineage Log](docs/known_issues.md): Diagnoses and impact analyses for generator design deviations (KI-01 to KI-04).
 - [Day 4 Walkthrough Report](docs/day04_walkthrough.md): Comprehensive Day 4 deliverables, test outputs, EQ scorecard, figure gallery, and handoff criteria.
