@@ -241,29 +241,95 @@
 
 ---
 
-## Next Steps (Handoff to Day 05: Anomaly Detection)
+### D53: Single Global Isolation Forest with Per-Machine Robust Normalization
+- **Context**: Different machine types have distinct nominal operating ranges, but training 12 separate models violates the architectural requirement for a maintainable, unified anomaly detector.
+- **Decision**: Train a single global Isolation Forest per feature set pooled across all machines, preconditioned with per-machine robust baseline normalization ( = (x - \text{median}) / (1.4826 \times \text{MAD})$) fitted strictly on each machine's training data.
+- **Consequences**: Unifies model architecture while standardizing feature scales across heterogeneous equipment.
 
-1. **Day 4 Accomplishments:**
-   - Completed all 13 EDA tasks, delivering 6 reproducible notebooks in `ml/notebooks/` (outputs stripped via `nbstripout`).
-   - Answered all 47 Exploratory Questions (EQ1 to EQ47) with quantitative evidence and bootstrap confidence intervals.
-   - Generated 10 publication-quality curated figures (`fig01_*.png` through `fig10_*.png`) in `docs/figures/`.
-   - Delivered `docs/eda_findings.md`, `docs/known_issues.md`, and `docs/day04_walkthrough.md`.
-   - Helper package `ml/eda/` fully tested and verified by `pytest tests/test_eda.py`.
+### D54: Operating State Gating and Masking
+- **Context**: Switched-off, idling, or unmonitored machines exhibit extreme signal dropouts that can trigger artificial anomaly alerts.
+- **Decision**: Restrict anomaly scoring strictly to intervals where state == 'Running'. Intervals in Offline or with missing features (NoData) are assigned NaN scores and explicit categorical states (Offline or NoData), preventing spurious alarms.
+- **Consequences**: Zero false alarms generated when machinery is unpowered or in maintenance.
 
-2. **Day 5 Modeling Scope (Isolation Forest Anomaly Detection):**
-   - **Candidate Feature Shortlist:** `motor_current`, `temperature`, `pressure`, `rpm`, `energy_consumption`, `vibration`, along with 24-hour trailing rolling means, standard deviations, and least-squares slopes (DEC-01).
-   - **Training Set Construction:** Fit Isolation Forest models strictly on the exploration period (first 70% of days), explicitly excluding known failure windows and scenario degradation episodes (DEC-02).
-   - **Dual Evaluation Protocol on M-104 (Mandatory):** Evaluate M-104 anomaly scoring twice:
-     1. On all features (including synthetic vibration and temperature overlay).
-     2. On **real-only features** (`pressure`, `motor_current`, `comp_state`, and native MetroPT channels).
-     *Note:* Modelers must report both sets of results honestly; (a) alone must never be claimed as real-world detection capability (DEC-03, Caveat C3).
-   - **Operational Threshold Proposals:** Implement proposed warning thresholds derived from exploration-period healthy quantiles ($p99.9$): Air Compressor Vibration: 4.0 mm/s (warning), 7.0 mm/s (critical); Temperature: 80.0 °C (warning), 85.0 °C (critical) (Section 6, `docs/eda_findings.md`).
-   - **Contamination Parameter:** Set Isolation Forest contamination parameter in the range **0.01 to 0.05 (recommended: 0.03)**. Do NOT set contamination to 32% (which reflects benign intraday duty switching, not physical faults) (DEC-02).
-   - **False Positive Stress Test:** Use machine `M-109` (benign vibration spikes) as a benchmark; ensure critical alert rate on M-109 is $< 5\%$ (DEC-04).
+### D55: Expanding-Window Cross-Validation with Temporal Buffer
+- **Context**: Standard randomized cross-validation leaks temporal patterns and autoregressive dependencies across folds.
+- **Decision**: Implement a 3-fold expanding-window cross-validation protocol restricted to the exploration period (2026-03-21 to 2026-08-17 00:00 UTC), enforcing a strict 24-hour buffer gap between training and validation folds.
+- **Consequences**: Zero temporal leakage across CV folds, ensuring hyperparameter selection reflects true forward-looking generalization.
 
-3. **Downstream Directives (Days 6 & 8):**
-   - **Day 6 (Failure Prediction):** Re-use `data/processed/ai4i_split_index.csv`. Strictly drop mode flags (`twf`, `hdf`, `pwf`, `osf`, `rnf`) and identifiers (`udi`, `product_id`). Report PR-AUC against baseline 0.0339 (DEC-05 to DEC-07).
-   - **Day 8 (Forecasting):** Apply 7-day seasonal differencing ($D=1$). Target beating MA-7 baseline MAE $\le 1,026.8$ units on fleet production (DEC-08, DEC-09).
+### D56: Training Exclusions and Label Buffer Protection
+- **Context**: Training an unsupervised detector on historical failure periods teaches the model that catastrophic equipment damage is nominal behavior.
+- **Decision**: Exclude all intervals associated with known failure modes, precursor degradation, and maintenance outages plus a $\pm 24$-hour buffer from the training set. Retain nominal operations and benign spikes (M-109).
+- **Consequences**: The model learns purely healthy operational dynamics without contamination from breakdown periods.
 
-4. **Active Branch for Day 5:** `feature/day-05-anomaly-detection`.
+### D57: Quantile-Anchored Piecewise Linear Calibration and Trailing Smoothing
+- **Context**: Raw Isolation Forest path-length scores ($-s(x)$) have arbitrary scale and shift across datasets, complicating alerting thresholds.
+- **Decision**: Map raw scores to $[0, 1]$ via piecewise linear calibration anchored to empirical normal training quantiles: median $\to 0.10$, warning quantile ({\text{warn}}$) $	o 0.50$, critical quantile ({\text{crit}}$) $	o 0.80$, and saturation $	o 1.00$. Smooth mapped scores using a causal trailing rolling mean (window 36 = 3 hours) with gap reset.
+- **Consequences**: Transparent, bounded operational score semantics where Warning status activates at $\ge 0.50$ and Critical at $\ge 0.80$.
 
+### D58: Episode Extraction, Minimum Duration, and Gap Merging
+- **Context**: Pointwise alerts produce high-frequency alert chatter and operational fatigue.
+- **Decision**: Group contiguous intervals with status Warning or Critical into distinct alert episodes. Enforce a minimum duration of 3 intervals (15 minutes) to filter transient noise, and merge episodes on the same machine separated by $< 2.0$ hours.
+- **Consequences**: Consolidates 736k pointwise intervals into 110 coherent operational alert episodes across the fleet.
+
+### D59: Baseline Comparison Against Simple Heuristics
+- **Context**: Machine learning anomaly detectors must demonstrate clear value over conventional engineering baselines.
+- **Decision**: Benchmark all Isolation Forest configurations against Baseline B1 (static threshold detector on vibration $> 4.0$ / .0$ mm/s and temperature $> 80$ / $ °C) and Baseline B2 (univariate robust $-score detector).
+- **Consequences**: Verified that IF-06 achieves superior false alarm suppression (.586$ vs. .5$ to .0$ FA/30d) while capturing multivariate degradation patterns.
+
+### D60: False-Alarm Budget Enforcement
+- **Context**: Anomaly detectors with excessive false alarms are quickly disabled by plant operators.
+- **Decision**: Pre-register a strict operational false alarm budget: $\le 1.0$ Warning-or-higher episode per machine per 30 days outside problem periods, and exactly $ Critical episodes outside problem periods. Machine M-109 (benign vibration spikes) must trigger $ Critical alerts.
+- **Consequences**: Configurations exceeding the false alarm budget are disqualified from primary model selection.
+
+### D61: Robust Factor Attribution and Multivariate Diagnostic Labeling
+- **Context**: Operators require actionable root-cause explanations alongside anomaly scores.
+- **Decision**: For every scored interval, extract the top 3 features by absolute robust $-score relative to machine baseline, reporting feature, direction (high/low), and magnitude. In alert episodes, label as {signal}_{direction} if the top factor accounts for $\ge 50\%$ of the top-3 sum, otherwise label as multivariate.
+- **Consequences**: Direct interpretability and automated diagnostic categorization for all fleet alarms.
+
+### D62: Real-Window Event-Level Evaluation Protocol
+- **Context**: Industrial predictive maintenance prioritizes lead time and incident detection over point-level precision/recall.
+- **Decision**: Evaluate detection performance against authentic MetroPT failure windows on M-104 using a 72-hour lead time window: classify as Early if alert occurs in $[start - 72\text{h}, start)$, Late if in $[start, end]$, and Missed otherwise.
+- **Consequences**: Rigorous, operationally meaningful evaluation metric reflecting true preventive intervention windows.
+
+### D63: Strict Experiment Budget Cap
+- **Context**: Unbounded hyperparameter tuning on validation sets causes selection bias and overoptimism.
+- **Decision**: Cap exploration-period cross-validation experiments to at most 40 distinct model configurations (evaluated across 3 folds), logged immutably in models/anomaly_experiments.csv.
+- **Consequences**: Prevents hyperparameter over-tuning and maintains statistical validity.
+
+### D64: Pre-Registration and Cryptographic Configuration Freezing
+- **Context**: Iterating on models after observing holdout data leads to data snooping and false scientific claims.
+- **Decision**: Formalize model selection in scripts/freeze_anomaly_config.py, recording SHA-256 hashes of model artifacts and configuration to models/anomaly_config_frozen.json before touching the holdout set.
+- **Consequences**: Guarantees true single-run holdout evaluation integrity with verifiable cryptographic auditability.
+
+### D65: Strict Train/Serve Parity and Feature Parity
+- **Context**: Mismatches between batch training feature pipelines and streaming inference logic cause catastrophic deployment failures.
+- **Decision**: Share identical feature engineering code (ml/preprocessing/features_sensor.py) across training, batch scoring, and windowed inference (inference.score_window). Implement automated parity tests asserting agreement to within \times 10^{-6}$.
+- **Consequences**: Complete parity between training and inference runtime behavior.
+
+### D66: Transactional Episode Persistence
+- **Context**: Partial database writes during batch anomaly scoring result in inconsistent reporting states.
+- **Decision**: Persist extracted alert episodes into PostgreSQL nomalies table within an atomic transaction, wiping previous records and verifying row counts match Parquet artifacts. Provide graceful fallback when database is offline.
+- **Consequences**: Safe database updates without risks of orphaned or duplicate records.
+
+---
+
+## Next Steps (Handoff to Day 06: Failure Prediction & Remaining Useful Life)
+
+1. **Day 5 Accomplishments:**
+   - Designed, trained, and frozen the Primary Isolation Forest model (IF-06, 5 core plan features) and Real-Only Comparator model (IF-25, 11 real features).
+   - Validated against 3-fold temporal CV; satisfied false alarm budget ($\le 1.0$ Warning FA/30d, $ Critical FA).
+   - Executed single-run holdout evaluation (docs/holdout_log.md); generated publication figures F11 to F14 in docs/figures/.
+   - Delivered scored dataset nomaly_scores.parquet (736,128 rows), nomaly_episodes.parquet (110 episodes), and nomaly_latest_status.csv (12 fleet rows).
+   - Implemented real-time inference module ml/anomaly_detection/inference.py and passed all 16 tests in 	ests/test_anomaly.py.
+
+2. **Day 6 Modeling Scope (Failure Prediction with LightGBM / XGBoost):**
+   - **Target Formulation:** Multi-class / binary equipment failure prediction using AI4I 2020 synthetic manufacturing telemetry (data/processed/ai4i_split_index.csv).
+   - **Feature Restrictions:** Strictly drop failure mode indicator flags (	wf, hdf, pwf, osf, 
+nf) and identifiers (udi, product_id). Input features strictly limited to sensor measurements and operating conditions.
+   - **Evaluation Standard:** Precision-Recall AUC (PR-AUC) evaluated against the naive minority base rate (.0339$).
+
+3. **Day 7 Handoff (API & Dashboard Integration):**
+   - Ingest data/processed/anomaly_latest_status.csv for executive fleet health overview.
+   - Serve real-time window scoring via ml.anomaly_detection.inference.score_window.
+
+4. **Active Branch:** eature/day-05-anomaly-detection.

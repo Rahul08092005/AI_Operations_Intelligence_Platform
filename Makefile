@@ -1,4 +1,4 @@
-.PHONY: verify-sources inspect-data data-raw validate-raw db-init db-load pipeline pipeline-sample data test lint format clean eda-run eda-test eda-strip help
+.PHONY: verify-sources inspect-data data-raw validate-raw db-init db-load pipeline pipeline-sample data test lint format clean eda-run eda-test eda-strip anomaly-cv anomaly-train anomaly-freeze anomaly-holdout anomaly-score anomaly-test help
 
 PYTHON ?= python
 
@@ -76,4 +76,23 @@ eda-test:
 
 eda-strip:
 	$(PYTHON) -m nbstripout ml/notebooks/01_overview_and_lineage.ipynb ml/notebooks/02_production_downtime_energy.ipynb ml/notebooks/03_sensors_machine_health.ipynb ml/notebooks/04_maintenance_and_failures.ipynb ml/notebooks/05_retail_demand_and_baselines.ipynb ml/notebooks/06_ai4i_failure_data.ipynb
+
+anomaly-cv:
+	$(PYTHON) scripts/run_anomaly_cv.py
+
+anomaly-train:
+	$(PYTHON) scripts/train_anomaly.py
+
+anomaly-freeze:
+	$(PYTHON) scripts/freeze_anomaly_config.py
+
+anomaly-holdout:
+	$(PYTHON) scripts/evaluate_holdout.py
+
+anomaly-score:
+	$(PYTHON) scripts/score_anomaly.py
+
+anomaly-test:
+	$(PYTHON) -m pytest tests/test_anomaly.py -v
+
 
