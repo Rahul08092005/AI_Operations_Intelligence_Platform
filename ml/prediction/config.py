@@ -133,5 +133,10 @@ XGB_FIXED_PARAMS: dict[str, Any] = {
 TARGET_RECALL_MED = 0.95
 TARGET_PRECISION_CRIT = 0.90
 
+# Risk categories order (Decision D75)
+RISK_CATEGORIES: tuple[str, ...] = ("Low", "Medium", "High", "Critical")
+RISK_CATEGORY_ORDER: list[str] = ["Low", "Medium", "High", "Critical"]
+
 # Background sample size for SHAP (Decision D79)
 SHAP_BACKGROUND_SIZE = 200
+
