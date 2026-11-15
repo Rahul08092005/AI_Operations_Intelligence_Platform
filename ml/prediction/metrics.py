@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -214,6 +214,14 @@ def compute_operating_metrics(
     }
 
 
+class BootstrapResult(NamedTuple):
+    """Container for bootstrap estimate and confidence intervals."""
+
+    point_estimate: float
+    ci_lower: float
+    ci_upper: float
+
+
 def bootstrap_ci(
     y_true: np.ndarray | pd.Series,
     y_prob: np.ndarray | pd.Series,
@@ -221,7 +229,7 @@ def bootstrap_ci(
     n_resamples: int = 2000,
     ci: float = 0.95,
     seed: int = SEED,
-) -> tuple[float, float, float]:
+) -> BootstrapResult:
     """Compute stratified bootstrap confidence intervals resampled within class."""
     y_t = np.asarray(y_true, dtype=np.int32)
     y_p = np.asarray(y_prob, dtype=np.float64)
@@ -234,7 +242,7 @@ def bootstrap_ci(
     n_neg = len(neg_idx)
 
     if n_pos == 0 or n_neg == 0:
-        return point_est, point_est, point_est
+        return BootstrapResult(point_est, point_est, point_est)
 
     rng = np.random.default_rng(seed)
     boot_estimates = np.empty(n_resamples, dtype=np.float64)
@@ -250,7 +258,7 @@ def bootstrap_ci(
     ci_lower = float(np.percentile(boot_estimates, alpha * 100))
     ci_upper = float(np.percentile(boot_estimates, (1.0 - alpha) * 100))
 
-    return point_est, ci_lower, ci_upper
+    return BootstrapResult(point_est, ci_lower, ci_upper)
 
 
 def compute_recall_ceiling(df_eval: pd.DataFrame) -> dict[str, Any]:
