@@ -9,6 +9,7 @@ Enforces Decision D80:
 from __future__ import annotations
 
 import logging
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -16,6 +17,17 @@ import pandas as pd
 from ml.prediction.config import RAW_FEATURE_COLS, TYPE_MAP
 
 logger = logging.getLogger(__name__)
+
+
+class ValidationResult(NamedTuple):
+    """Result of input validation containing canonical DataFrame and warnings per row."""
+
+    validated_df: pd.DataFrame
+    warnings: list[list[str]]
+
+    @property
+    def is_valid(self) -> bool:
+        return True
 
 # Column name aliases accepted from API payloads
 COLUMN_ALIASES: dict[str, str] = {
@@ -120,7 +132,16 @@ def validate_inputs(
         row_warnings: list[str] = []
         for col in numeric_cols:
             val = float(row[col])
-            min_bound, max_bound = ranges.get(col, (-np.inf, np.inf))
+            col_spec = ranges.get(col, (-np.inf, np.inf))
+            if isinstance(col_spec, dict):
+                c_min = float(col_spec["min"])
+                c_max = float(col_spec["max"])
+                span = c_max - c_min
+                min_bound = c_min - 0.10 * span
+                max_bound = c_max + 0.10 * span
+            else:
+                min_bound, max_bound = col_spec
+
             if val < min_bound or val > max_bound:
                 msg = (
                     f"{col} outside training range "
@@ -129,4 +150,4 @@ def validate_inputs(
                 row_warnings.append(msg)
         warnings_per_row.append(row_warnings)
 
-    return clean_df[RAW_FEATURE_COLS].copy(), warnings_per_row
+    return ValidationResult(clean_df[RAW_FEATURE_COLS].copy(), warnings_per_row)
