@@ -27,6 +27,8 @@ SPLIT_INDEX_PATH = PROCESSED_DIR / "ai4i_split_index.csv"
 FROZEN_CONFIG_PATH = MODELS_DIR / "failure_config_frozen.json"
 MODEL_ARTIFACT_PATH = MODELS_DIR / "failure_model.pkl"
 METADATA_ARTIFACT_PATH = MODELS_DIR / "failure_model_metadata.json"
+MODEL_PKL_PATH = MODEL_ARTIFACT_PATH
+MODEL_METADATA_PATH = METADATA_ARTIFACT_PATH
 HOLDOUT_LOG_PATH = DOCS_DIR / "holdout_log.md"
 
 EXPERIMENTS_LOG_PATH = PROCESSED_DIR / "failure_experiments.csv"
@@ -37,8 +39,12 @@ DEMO_STATES_PATH = PROCESSED_DIR / "machine_ai4i_state.parquet"
 MACHINE_RISK_DAILY_PATH = PROCESSED_DIR / "machine_risk_daily.parquet"
 MACHINE_RISK_LATEST_PATH = PROCESSED_DIR / "machine_risk_latest.csv"
 
+# Model version string
+MODEL_VERSION = "failure-xgb-1.0.0"
+
 # Problem framing statement (Decision D67, Rule R10)
 FRAMING_STATEMENT = "Failure risk for the current operating state"
+DEFAULT_FRAMING = FRAMING_STATEMENT
 
 # Risk Categories Vocabulary (Decision D75)
 RISK_LOW = "Low"
