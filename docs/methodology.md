@@ -40,11 +40,39 @@ Calibrated scores are smoothed using a causal trailing rolling mean (window 36 =
 
 ---
 
-## 3. Failure Prediction & Prognostics Methodology (Day 6 Handoff)
+## 3. Machine Failure Risk Prediction Methodology (Day 6)
 
-- Supervised classification using LightGBM / XGBoost on AI4I 2020 synthetic manufacturing telemetry (`data/processed/ai4i_split_index.csv`).
-- Strict exclusion of failure mode indicators (`twf`, `hdf`, `pwf`, `osf`, `rnf`) and identifiers (`udi`, `product_id`).
-- Primary metric: PR-AUC evaluated against the naive minority base rate ($0.0339$).
+### 3.1 Operating State Framing (Decision D67)
+AI4I 2020 lacks temporal timestamps, run-to-failure trajectories, or machine identifiers. The failure prediction model is mathematically framed as estimating the **instantaneous failure risk of an operating state**, rather than a prognostic time-to-failure horizon ("failure within $N$ days").
+
+### 3.2 Leakage Prevention & Feature Engineering (Decisions D69, D70)
+- **Forbidden Columns:** Target-composing failure mode indicators (`twf`, `hdf`, `pwf`, `osf`, `rnf`) and identifiers (`udi`, `product_id`) are strictly excluded from the feature space. Mode flags are reserved exclusively for post-evaluation diagnostic recall breakdowns.
+- **Continuous Physics Quantities (F1):** Thermodynamic and mechanical quantities are engineered to allow gradient boosted trees to identify boundary regions without hand-coding dataset decision rules:
+  $$\text{temp\_diff\_k} = \text{process\_temperature\_k} - \text{air\_temperature\_k}$$
+  $$\text{power\_w} = \text{torque\_nm} \times \left(\text{rotational\_speed\_rpm} \times \frac{2\pi}{60}\right)$$
+  $$\text{strain\_nmin} = \text{tool\_wear\_min} \times \text{torque\_nm}$$
+  $$\text{type} = \text{OrdinalCode}(L=0, M=1, H=2)$$
+
+### 3.3 Evaluation Protocol & Model Selection (Decisions D71, D72, D73)
+- **Repeated Stratified Cross-Validation:** Due to high class imbalance (~3.4% failure prevalence), candidate models are evaluated using Repeated Stratified K-Fold (5 folds $\times$ 2 repeats = 10 evaluations) on training rows only.
+- **Pre-Registered Random Search:** 50 random hyperparameter draws + 3 ablations evaluated under pre-registered bounds.
+- **Cascading Selection Rule:** Highest pooled out-of-fold PR-AUC, breaking ties ($\Delta \le 0.002$) by lowest Brier score, then lowest model complexity ($\text{max\_depth} \times \text{n\_estimators}$). Deterministically selected `XGB-PHYS-08` (depth=4, 600 estimators, PR-AUC=0.8821).
+
+### 3.4 Calibration & Risk Categorization (Decisions D74, D75)
+- **Nested Calibrator Selection:** Isotonic regression outperformed Platt sigmoid with a +5.49% lower nested Brier score and lower ECE (0.0023 vs 0.0029).
+- **Derived Operational Thresholds:**
+  - $t_{\text{med}} = 0.0460$: Target 95% recall on training out-of-fold predictions.
+  - $t_{\text{high}} = 0.5000$: Maximum F1 score ($F1 = 0.8647$) on training out-of-fold predictions.
+  - $t_{\text{crit}} = 0.5000$: Enforces monotonicity clamp ($t_{\text{crit}} \ge t_{\text{high}}$).
+
+### 3.5 Holdout Discipline & Empirical Recall Ceiling (Decisions D68, D82)
+- **Pre-Registration Freeze:** Artifact hashes recorded in `models/failure_config_frozen.json` before single holdout access.
+- **Single-Run Test Evaluation (N=2,000, 68 failures):** Test PR-AUC = 0.8756 [0.8060, 0.9366] vs. prevalence baseline 0.0340; Test ROC-AUC = 0.9775; Test Recall = 80.88%; Test Precision = 93.22%.
+- **Empirical Recall Ceiling:** Inherent uniform random noise failures (`rnf`) exhibit zero precursor signals, bounding the theoretical test recall ceiling at **97.06%** (66/68 physical failures).
+
+### 3.6 Replay Architecture for Demo Machines (Decision D78)
+Demo machine states for the 12 fleet assets are generated via scenario mixture sampling with replacement strictly from the quarantined test partition, flagged with `is_replay = True`.
+
 
 ---
 

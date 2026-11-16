@@ -1,4 +1,4 @@
-.PHONY: verify-sources inspect-data data-raw validate-raw db-init db-load pipeline pipeline-sample data test lint format clean eda-run eda-test eda-strip anomaly-cv anomaly-train anomaly-freeze anomaly-holdout anomaly-score anomaly-test help
+.PHONY: verify-sources inspect-data data-raw validate-raw db-init db-load pipeline pipeline-sample data test lint format clean eda-run eda-test eda-strip anomaly-cv anomaly-train anomaly-freeze anomaly-holdout anomaly-score anomaly-test failure-search failure-train failure-freeze failure-test failure-demo failure-test-suite help
 
 PYTHON ?= python
 
@@ -94,5 +94,23 @@ anomaly-score:
 
 anomaly-test:
 	$(PYTHON) -m pytest tests/test_anomaly.py -v
+
+failure-search:
+	$(PYTHON) scripts/run_failure_search.py
+
+failure-train:
+	$(PYTHON) scripts/train_failure.py
+
+failure-freeze:
+	$(PYTHON) scripts/freeze_failure_config.py
+
+failure-test:
+	$(PYTHON) scripts/evaluate_failure_test.py
+
+failure-demo:
+	$(PYTHON) scripts/build_machine_risk.py
+
+failure-test-suite:
+	$(PYTHON) -m pytest tests/test_failure_model.py -v
 
 

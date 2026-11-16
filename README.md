@@ -177,8 +177,48 @@ An unsupervised, fleet-wide anomaly detection system delivering early equipment 
 
 ---
 
+## Phase 4: Machine Failure Risk Prediction (Day 6)
+
+A calibrated gradient-boosted decision tree system estimating operating state failure risk under severe class imbalance (~3.4% failure prevalence) with rigorous leakage elimination and pre-registration discipline.
+
+### Architectural Highlights
+- **Operating State Failure Risk Framing ([D67](docs/architecture.md#d67-operating-state-failure-risk-framing)):** Formulated as estimating the failure risk of an instantaneous operating state rather than a prognostic time-to-failure horizon, honoring the non-temporal structure of the AI4I 2020 dataset.
+- **Physics-Derived Features vs. Leakage Exclusion ([D69](docs/architecture.md#d69-continuous-physics-derived-quantities--type-encoding), [D70](docs/architecture.md#d70-strict-exclusion-of-mode-flags-and-identifiers)):** Strict exclusion of target-composing failure mode flags (`twf`, `hdf`, `pwf`, `osf`, `rnf`) and identifiers (`udi`, `product_id`). Continuous physical quantities (`temp_diff_k`, `power_w`, `strain_nmin`) boosted Test PR-AUC from 0.8269 to 0.8756 (+4.87%) without hand-coding dataset decision rules.
+- **Pre-Registered Hyperparameter Search & Selection ([D72](docs/architecture.md#d72-pre-registered-xgboost-hyperparameter-search-space), [D73](docs/architecture.md#d73-parsimonious-primary-model-selection-rule)):** 50 random draws evaluated under Repeated Stratified K-Fold (5x2) CV. A coded, cascading selection rule deterministically selected `XGB-PHYS-08` (depth=4, 600 estimators, lr=0.03).
+- **Nested Isotonic Calibration & Risk Categorization ([D74](docs/architecture.md#d74-nested-cross-fitting-calibrator-selection), [D75](docs/architecture.md#d75-out-of-fold-derived-risk-thresholds)):** Isotonic calibration achieved a +5.49% nested Brier reduction (0.0084 vs 0.0089). Operating thresholds derived from training OOF predictions: Low ($<0.0460$), Medium ($0.0460 \le p < 0.5000$), High ($0.5000 \le p < 0.5000$), and Critical ($p \ge 0.5000$).
+- **Cryptographic Pre-Registration Freeze ([D68](docs/architecture.md#d68-guarded-ai4i-test-partition-discipline)):** All model artifacts and search logs were cryptographically frozen (`bfec1db6...`) prior to single-run holdout evaluation.
+- **Replay Demo Architecture ([D78](docs/architecture.md#d78-replay-based-demo-machine-state-mixture-sampling-resolution-of-oq-1)):** Demo machine states for the 12 fleet assets are generated via scenario mixture sampling with replacement strictly from the quarantined test partition, flagged with `is_replay = True`.
+
+### Performance Scorecard (Single-Run Test Evaluation, N=2,000, 68 Failures)
+
+| Metric | Primary Model (`XGB-PHYS-08`) | 95% Bootstrap CI | Logistic Regression | XGBoost Raw Ablation | Prevalence Baseline |
+|---|---|---|---|---|---|
+| **PR-AUC** | **0.8756** | [0.8060, 0.9366] | 0.4686 | 0.8269 | 0.0340 |
+| **ROC-AUC** | **0.9775** | [0.9551, 0.9956] | 0.8931 | 0.9639 | 0.5000 |
+| **F1 Score** | **0.8661** | [0.7937, 0.9231] | 0.5455 | 0.7692 | 0.0658 |
+| **Recall (@ $t_{\text{high}}$)** | **80.88%** (55/68) | [70.59%, 89.71%] | 44.12% | 69.12% | 0.00% |
+| **Precision (@ $t_{\text{high}}$)**| **93.22%** (55/59) | [86.15%, 98.33%] | 71.43% | 87.04% | 3.40% |
+| **Brier Score** | **0.0084** | [0.0051, 0.0125] | 0.0245 | 0.0108 | 0.0328 |
+| **ECE (10 bins)** | **0.0047** | [0.0021, 0.0094] | 0.0142 | 0.0076 | — |
+
+*Bootstrap confidence intervals computed via 2,000 stratified resamples of the test partition (seed 42).*
+
+### Key Failure Risk Visualizations
+
+#### Test Partition Precision-Recall & ROC Curves
+![Failure ROC and PR Curves](docs/figures/fig17_failure_roc_pr_curves.png)
+*Figure 17: Precision-Recall curve (top panel) demonstrating PR-AUC = 0.8756 against the 0.0340 prevalence baseline, and ROC curve (bottom panel) demonstrating ROC-AUC = 0.9775 on the 2,000-row quarantined test partition, with the selected operating threshold $t_{\text{high}} = 0.50$ highlighted.*
+
+### Crucial Caveats & Intellectual Honesty Statement
+> **Caveats C1 & C2 (Rule-Generated Labels & Recall Ceiling):** The AI4I dataset labels were generated using mathematical equations rather than physical machine breakdowns. High detection performance reflects gradient boosting successfully recovering multi-dimensional decision boundaries, not superhuman intelligence on messy industrial hardware. Furthermore, uniform random noise failures (`rnf`) exhibit zero precursor signals, establishing a theoretical and empirical recall ceiling of **97.06%** (66/68 physical failures). Fleet risk values in the demo dashboard are replayed test states (`is_replay=True`), not live plant telemetry.
+
+---
+
 ## Documentation Index
 
+- [Failure Prediction Technical Report](docs/failure_model.md): Architecture, physics feature engineering, CV selection, isotonic calibration, test evaluation, and caveats C1–C7.
+- [Model Card: Failure Predictor](docs/model_card_failure.md): Formal model card documenting intended use, operating thresholds, recall ceiling, and retraining protocol.
+- [Day 6 Walkthrough Report](docs/day06_walkthrough.md): Comprehensive Day 6 deliverables, test outputs, search summary, and Day 7 handoff.
 - [Anomaly Detection Technical Report](docs/anomaly_detection.md): Architecture, state gating, CV selection, holdout evaluation, factor attribution, and caveats C1–C7.
 - [Model Card: Anomaly Detector](docs/model_card_anomaly.md): Formal model card documenting intended use, limitations, performance, and retraining protocol.
 - [Holdout Evaluation Audit Log](docs/holdout_log.md): Single-run holdout execution record and cryptographic artifact hashes.
@@ -192,7 +232,8 @@ An unsupervised, fleet-wide anomaly detection system delivering early equipment 
 - [Feature Catalog](docs/feature_catalog.md): Complete catalog of 89 engineered sensor features, mathematical definitions, rolling windows, and leakage classifications.
 - [Data Dictionary](docs/data_dictionary.md): Field-level descriptions, data types, units, and nullability contracts for raw and processed operational tables.
 - [Data Mapping Specification](docs/data_mapping.md): Transformation rules, whole-week time shifts, and synthetic signal derivations.
-- [Architecture Decision Records](docs/architecture.md): Formal design decisions (D01 through D52) and Day 5 handoff.
+- [Architecture Decision Records](docs/architecture.md): Formal design decisions (D01 through D82) and Day 7 handoff.
 - [Day 2 Walkthrough Report](docs/day02_walkthrough.md): Comprehensive Day 2 deliverables, verification results, and acceptance checklists.
 - [Day 3 Walkthrough Report](docs/day03_walkthrough.md): Comprehensive Day 3 data pipeline deliverables, sanity checks, and benchmark execution metrics.
+
 

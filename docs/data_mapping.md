@@ -139,3 +139,13 @@ To achieve historical realism while maintaining live operations relevance in Oct
 | **M-110** | Conveyor Drive | Plant C, Line 1 | Past Failure Mid | Overstrain bearing failure at Day 138 (2026-08-05), repaired |
 | **M-111** | Conveyor Drive | Plant C, Line 2 | Past Failure Recent | Heat dissipation VFD failure at Day 155 (2026-08-22), repaired |
 | **M-112** | Conveyor Drive | Plant C, Line 2 | In Maintenance | Ongoing overhaul started 2026-10-18 08:00 (active outage) |
+
+---
+
+## 6. Resolution of Open Questions
+
+### OQ-1: AI4I Telemetry Linkage for Demo Machines (Resolved in Day 6 - D78)
+- **Status:** RESOLVED (Adopted Approach A: Replay Mixture Sampling).
+- **Context:** The AI4I 2020 dataset represents synthetic milling machine cutting states without machine identities or timestamps. The 12 fleet assets in the platform include air compressors, hydraulic presses, and conveyor drives. Attempting an adapter mapping from compressor sensor telemetry into AI4I milling features would introduce fabricated physical relationships (violating Decision D78 and Caveat C5).
+- **Resolution:** As formalized in Decision D78, each demo machine receives daily AI4I-style operating states sampled with replacement strictly from the quarantined AI4I test partition according to scenario-aligned mixture interpolations (Low, Stressed, and High stress pools). All sampled operating states and derived failure predictions are explicitly flagged with `is_replay = True`. Machine M-104 exhibits an escalating trajectory toward high-stress failure states, and M-112 reflects an active maintenance event on Day 30.
+

@@ -6,3 +6,4 @@ Provides failure-risk modeling for industrial operating states using AI4I 2020 t
 from __future__ import annotations
 
 __version__ = "1.0.0"
+

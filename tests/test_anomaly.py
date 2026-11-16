@@ -582,21 +582,22 @@ def test_train_serve_parity_integration():
     scores_batch = pd.read_parquet(scores_path)
     sensors = pd.read_parquet(sensors_path)
 
-    # Pick M-101 and a 3-day window (864 intervals)
-    m_sensors = sensors[sensors["machine_id"] == "M-101"].sort_values("timestamp")
+    # Pick an available machine (M-101 if full run, or first available machine in sample run) and a 3-day window
+    target_machine = "M-101" if "M-101" in sensors["machine_id"].values else str(sensors["machine_id"].iloc[0])
+    m_sensors = sensors[sensors["machine_id"] == target_machine].sort_values("timestamp")
     test_window = m_sensors.iloc[1000:1864].copy()
 
     # Score using inference.score_window
     scored_window = score_window(
         test_window,
-        machine_id="M-101",
+        machine_id=target_machine,
         model_path=model_path,
         return_all=False,  # Evaluates points after the 24h history
     )
 
     eval_ts = scored_window["timestamp"]
     batch_sub = scores_batch[
-        (scores_batch["machine_id"] == "M-101") & (scores_batch["timestamp"].isin(eval_ts))
+        (scores_batch["machine_id"] == target_machine) & (scores_batch["timestamp"].isin(eval_ts))
     ].sort_values("timestamp").reset_index(drop=True)
 
     # Parity check within 1e-6

@@ -75,6 +75,18 @@ MODE_FLAG_COLS = ["twf", "hdf", "pwf", "osf", "rnf"]
 # Identifier columns (strictly dropped per R3, D70)
 IDENTIFIER_COLS = ["udi", "product_id"]
 
+# Forbidden leakage columns (Rule R3, Decision D70)
+FORBIDDEN_COLUMNS: list[str] = [
+    "twf",
+    "hdf",
+    "pwf",
+    "osf",
+    "rnf",
+    "udi",
+    "product_id",
+    "machine_failure",
+]
+
 # Forbidden columns that must never enter the feature matrix
 FORBIDDEN_COLS = set(MODE_FLAG_COLS + IDENTIFIER_COLS + [TARGET_COL])
 
