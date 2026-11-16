@@ -294,3 +294,4 @@ This mathematically guarantees that local TreeSHAP explanations on Day 10 will s
 - **Figure 16 (`docs/figures/fig16_failure_calibration.png`):** Reliability diagram and calibration curves comparing uncalibrated XGBoost, Platt Sigmoid, and Isotonic Regression on pooled out-of-fold predictions and the frozen test partition.
 - **Figure 17 (`docs/figures/fig17_failure_roc_pr_curves.png`):** Precision-Recall and ROC curves for the frozen primary model evaluated on the quarantined test partition ($N=2,000$, 68 failures). Shows PR-AUC = 0.8756 against the 0.0340 prevalence baseline and marks the $t_{\text{high}}$ operating point.
 - **Figure 18 (`docs/figures/fig18_failure_confusion_matrix.png`):** Multi-threshold confusion matrices and diagnostic recall breakdown across individual failure modes (`pwf`, `osf`, `hdf`, `twf`, `rnf`) on the test partition, highlighting the 97.06% physical recall ceiling.
+
