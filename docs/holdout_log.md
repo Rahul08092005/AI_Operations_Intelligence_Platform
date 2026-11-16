@@ -61,3 +61,58 @@ This document records immutable, single-run holdout evaluations under Decision D
 | `M-112` | `2026-10-19 23:55:00+00:00` | `Offline` | N/A | **Offline** | N/A | **True** |
 
 ---
+
+## Failure Model Test Partition Evaluation — 2026-11-15 15:37:42 UTC
+
+- **Execution Mode:** Frozen Pre-Registered Configuration (Rule R2, Decision D68)
+- **Frozen Hash (SHA-256):** `bfec1db63882ac7f4861c7569949d9f0ad6c934c0200ac8eac3753fb85840b2b`
+- **Test Partition Size:** 2,000 rows (68 positive failures, prevalence: 0.0340)
+- **Model Version:** `failure-xgb-1.0.0`
+- **Primary Configuration ID:** `XGB-PHYS-08`
+- **Operating Thresholds:** `t_med=0.0460`, `t_high=0.5000`, `t_crit=0.5000`
+
+### 1. Headline Evaluation Metrics (Test Partition)
+
+| Metric | Primary Model | 95% Bootstrap CI | Baseline (Majority) | Baseline (Logistic Reg) | Ablation (Raw Features) |
+|---|---|---|---|---|---|
+| **PR-AUC (Average Precision)** | **0.8756** | [0.8060, 0.9366] | 0.0340 | 0.4686 | 0.8269 |
+| **ROC-AUC** | **0.9775** | [0.9551, 0.9956] | 0.5000 | 0.9258 | 0.9684 |
+| **F1 Score (@ t_high)** | **0.8661** | [0.7969, 0.9242] | 0.0000 | 0.2697 | 0.7692 |
+| **Recall (@ t_high, n=68)** | **0.8088** | [0.7059, 0.8971] | 0.0000 | 0.1765 | 0.6618 |
+| **Precision (@ t_high)** | **0.9322** | [0.8615, 0.9833] | 0.0000 | 0.5714 | 0.9184 |
+| **Accuracy (@ t_high)** | **0.9915** | N/A | 0.9660 | 0.9675 | 0.9865 |
+| **Brier Score** | **0.0076** | [0.0049, 0.0107] | 0.0328 | 0.0241 | 0.0125 |
+| **Expected Calibration Error (ECE)** | **0.0020** | N/A | N/A | 0.0084 | 0.0078 |
+
+*Note: All recall and precision figures are computed with exactly 68 positive failures in the test partition.*
+
+### 2. Operating Points Performance on Test Partition
+
+| Operating Point | Threshold | Recall (n=68) | Precision | False Positives | True Positives | True Negatives | False Negatives |
+|---|---|---|---|---|---|---|---|
+| **t_med** (Target Recall >= 0.95) | 0.0460 | 94.1% | 31.7% | 138 | 64 | 1794 | 4 |
+| **t_high** (Max F1 Score) | 0.5000 | 80.9% | 93.2% | 4 | 55 | 1928 | 13 |
+| **t_crit** (Target Precision >= 0.90) | 0.5000 | 80.9% | 93.2% | 4 | 55 | 1928 | 13 |
+| **Default (0.50)** | 0.5000 | 80.9% | 93.2% | 4 | 55 | 1928 | 13 |
+
+### 3. Test Category Reliability & Volume Share
+
+| Category | Range | Rows | Share (%) | Failures | Empirical Failure Rate |
+|---|---|---|---|---|---|
+| **Low** | `[0.0000, 0.0460)` | 1,798 | 89.90% | 4 | 0.0022 |
+| **Medium** | `[0.0460, 0.5000)` | 143 | 7.15% | 9 | 0.0629 |
+| **High** | `[0.5000, 0.5000)` | 0 | 0.00% | 0 | 0.0000 |
+| **Critical** | `[0.5000, 1.0000]` | 59 | 2.95% | 55 | 0.9322 |
+
+### 4. Failure Mode Breakdown & Recall Ceiling
+
+| Failure Mode | Test Count | Detected (@ t_high) | Recall | Classification Nature |
+|---|---|---|---|---|
+| **twf** (Tool Wear Failure) | 10 | 1 | 10.0% | Physical degradation |
+| **hdf** (Heat Dissipation Failure) | 29 | 27 | 93.1% | Thermodynamic limit |
+| **pwf** (Power Failure) | 13 | 13 | 100.0% | Power envelope violation |
+| **osf** (Overstrain Failure) | 16 | 16 | 100.0% | Mechanical overstrain |
+| **rnf** (Random Failures) | 4 | 0 | 0.0% | Uniform random noise (Unpredictable) |
+
+- **Empirical Test Recall Ceiling (Caveat C2):** **97.06%** (66/68 failures contain at least one physical non-random failure mode).
+- **Caveat C1 Intellectual Honesty Statement:** The near-perfect scores achieved on physical failure modes (`hdf`, `pwf`, `osf`) directly reflect the rule-generated nature of the synthetic AI4I 2020 benchmark dataset. The model learns mathematical representations of these physical envelopes. On truly random failures (`rnf`), detection recall is near 0%, as expected.

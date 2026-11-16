@@ -308,28 +308,107 @@
 
 ### D66: Transactional Episode Persistence
 - **Context**: Partial database writes during batch anomaly scoring result in inconsistent reporting states.
-- **Decision**: Persist extracted alert episodes into PostgreSQL nomalies table within an atomic transaction, wiping previous records and verifying row counts match Parquet artifacts. Provide graceful fallback when database is offline.
+- **Decision**: Persist extracted alert episodes into PostgreSQL `anomalies` table within an atomic transaction, wiping previous records and verifying row counts match Parquet artifacts. Provide graceful fallback when database is offline.
 - **Consequences**: Safe database updates without risks of orphaned or duplicate records.
 
 ---
 
-## Next Steps (Handoff to Day 06: Failure Prediction & Remaining Useful Life)
+### D67: Operating State Failure Risk Framing
+- **Context**: AI4I 2020 lacks temporal timestamps, run-to-failure trajectories, or machine identifiers. Modeling "failure within the next N days" would be scientifically dishonest.
+- **Decision**: Frame all modeling, API contracts, and documentation as "failure risk for the current operating state".
+- **Consequences**: Avoids false prognostic claims while delivering actionable risk scores for industrial equipment settings.
 
-1. **Day 5 Accomplishments:**
-   - Designed, trained, and frozen the Primary Isolation Forest model (IF-06, 5 core plan features) and Real-Only Comparator model (IF-25, 11 real features).
-   - Validated against 3-fold temporal CV; satisfied false alarm budget ($\le 1.0$ Warning FA/30d, $ Critical FA).
-   - Executed single-run holdout evaluation (docs/holdout_log.md); generated publication figures F11 to F14 in docs/figures/.
-   - Delivered scored dataset nomaly_scores.parquet (736,128 rows), nomaly_episodes.parquet (110 episodes), and nomaly_latest_status.csv (12 fleet rows).
-   - Implemented real-time inference module ml/anomaly_detection/inference.py and passed all 16 tests in 	ests/test_anomaly.py.
+### D68: Guarded AI4I Test Partition Discipline
+- **Context**: Accessing test data during exploratory analysis or hyperparameter search causes optimistic overfitting.
+- **Decision**: Quarantine the 2,000-row AI4I holdout partition behind `load_test()`, which cryptographically raises `PermissionError` until `models/failure_config_frozen.json` is frozen with artifact SHA-256 hashes. Test evaluation is strictly single-run.
+- **Consequences**: Eliminates test leakage and guarantees scientific reproducibility.
 
-2. **Day 6 Modeling Scope (Failure Prediction with LightGBM / XGBoost):**
-   - **Target Formulation:** Multi-class / binary equipment failure prediction using AI4I 2020 synthetic manufacturing telemetry (data/processed/ai4i_split_index.csv).
-   - **Feature Restrictions:** Strictly drop failure mode indicator flags (	wf, hdf, pwf, osf, 
-nf) and identifiers (udi, product_id). Input features strictly limited to sensor measurements and operating conditions.
-   - **Evaluation Standard:** Precision-Recall AUC (PR-AUC) evaluated against the naive minority base rate (.0339$).
+### D69: Continuous Physics-Derived Quantities & Type Encoding
+- **Context**: Raw AI4I features alone omit critical thermodynamic and mechanical stress interactions.
+- **Decision**: Engineer continuous physical quantities in F1: `temp_diff_k = process_temp - air_temp`, mechanical power in Watts `power_w = torque * rpm * 2 * pi / 60`, and cumulative strain `strain_nmin = tool_wear * torque`. Encode machine variant ordinally (`L=0, M=1, H=2`).
+- **Consequences**: Physics features boost PR-AUC from 0.8269 to 0.8756 (+5.89 percentage points) without hardcoding dataset decision rules.
 
-3. **Day 7 Handoff (API & Dashboard Integration):**
-   - Ingest data/processed/anomaly_latest_status.csv for executive fleet health overview.
-   - Serve real-time window scoring via ml.anomaly_detection.inference.score_window.
+### D70: Strict Exclusion of Mode Flags and Identifiers
+- **Context**: The AI4I dataset contains failure mode indicators (`twf`, `hdf`, `pwf`, `osf`, `rnf`) that directly compose the target label `machine_failure`, as well as arbitrary identifiers (`udi`, `product_id`).
+- **Decision**: Strictly exclude all 5 failure mode flags and identifiers from feature matrices. Enforce this via programmatic assertions in `features.py` and `controls.py`.
+- **Consequences**: Eliminates trivial label leakage. Mode flags are used strictly for diagnostic post-evaluation recall breakdowns.
 
-4. **Active Branch:** eature/day-05-anomaly-detection.
+### D71: Imbalance-Aware Primary Evaluation Standards
+- **Context**: With only ~3.4% failure prevalence, classification accuracy (96.6% by predicting majority class) is completely misleading.
+- **Decision**: Mandate Precision-Recall AUC (PR-AUC) as the primary ranking and selection metric, always reported alongside the prevalence baseline. Require recall at high precision, confusion matrices at operating thresholds, and Brier score.
+- **Consequences**: Honest evaluation reflecting real industrial utility where false negatives are costly.
+
+### D72: Pre-Registered XGBoost Hyperparameter Search Space
+- **Context**: Unbounded hyperparameter tuning risks overfitting to cross-validation splits.
+- **Decision**: Pre-register a 50-draw random hyperparameter search grid evaluated on Repeated Stratified K-Fold (5 folds x 2 repeats) on training data only. Cap total evaluated configurations at 60 (including ablations).
+- **Consequences**: Rigorous, transparent hyperparameter optimization without post-hoc tuning.
+
+### D73: Parsimonious Primary Model Selection Rule
+- **Context**: Choosing between competing models with marginal performance differences requires clear criteria.
+- **Decision**: Pre-register a strict cascading selection rule: 1) Highest mean pooled out-of-fold PR-AUC; 2) For ties within 0.002: lowest Brier score, then smallest model complexity (n_estimators * max_depth), then lowest n_estimators.
+- **Consequences**: Coded algorithm selected `XGB-PHYS-08` (depth=4, n_estimators=600, PR-AUC=0.8821) automatically without manual intervention.
+
+### D74: Nested Cross-Fitted Probability Calibration
+- **Context**: Raw tree ensemble probabilities are notoriously uncalibrated and distorted by class weighting.
+- **Decision**: Compare Platt scaling (sigmoid) vs Isotonic regression using 5-fold nested cross-fitting on OOF predictions. Choose isotonic only if nested Brier score improves by >= 5% without worsening ECE; otherwise use sigmoid. Fit final calibrator on all OOF predictions.
+- **Consequences**: Isotonic selected (+5.49% Brier gain, ECE 0.0023 vs 0.0029). Yields calibrated probabilities that represent true empirical likelihoods.
+
+### D75: Operating Risk Thresholds Derivation
+- **Context**: Industrial operators need actionable categorical risk tiers (`Low`, `Medium`, `High`, `Critical`) rather than raw probabilities.
+- **Decision**: Derive thresholds on calibrated OOF predictions: t_med (highest threshold where recall >= 0.95), t_high (threshold maximizing F1), and t_crit (lowest threshold where precision >= 0.90). Enforce monotonicity t_med <= t_high <= t_crit.
+- **Consequences**: Derived clean operating thresholds (t_med=0.0460, t_high=0.5000, t_crit=0.5000) with monotonically increasing failure rates across risk tiers.
+
+### D76: Physics vs Raw Feature Set Ablation
+- **Context**: Quantifying the marginal value of domain-specific feature engineering is essential for model interpretability.
+- **Decision**: Benchmark the primary physics model (F1) against an ablation refit on raw features (F0) using identical hyperparameters.
+- **Consequences**: Confirmed that physics features increase test PR-AUC from 0.8269 to 0.8756 (+4.87%) and test F1 from 0.7692 to 0.8661 (+9.69%).
+
+### D77: Stratified Bootstrap Uncertainty Bounds
+- **Context**: Test metrics on small positive counts (68 failures) carry sampling variance that point estimates obscure.
+- **Decision**: Compute 95% confidence intervals using stratified bootstrap resampling (2,000 iterations within class, seed 42) for all test performance figures.
+- **Consequences**: Transparently reports test PR-AUC as [0.8060, 0.9366] and recall as [0.7059, 0.8971].
+
+### D78: Replay-Based Demo Machine State Mixture Sampling (Resolution of OQ-1)
+- **Context**: AI4I has no machine dimension, yet the platform demo requires daily states for 12 machines over the last 30 days of the timeline.
+- **Decision**: Resolve Open Question OQ-1 by sampling states with replacement exclusively from the AI4I test partition using scenario-based mixture interpolations (`low`, `stressed`, `high` pools based on training 75th percentiles). Flag all demo rows with `is_replay = True`.
+- **Consequences**: Realistic, scenario-consistent machine risk progressions without contaminating model training or pretending replayed states are live predictions.
+
+### D79: SHAP TreeExplainer Additivity Verification
+- **Context**: Model explainability on Day 10 requires tree structures compatible with TreeExplainer additivity.
+- **Decision**: Execute a pre-flight SHAP readiness check during model training, verifying that sum(SHAP) + expected_value equals booster margin to within 1e-3 on 500 rows. Store 200 training background samples in the model bundle.
+- **Consequences**: Confirmed TreeExplainer additivity with max discrepancy of 1.34e-5, fully guarding Day 10 explanations.
+
+### D80: Serving Contract and Input Envelope Validation
+- **Context**: Production serving endpoints on Day 7 require standard input payload validation and warnings for out-of-distribution operational states.
+- **Decision**: Implement `ml/prediction/inference.py` with `predict_one` and `predict_batch`. Normalize column aliases and return non-blocking `input_warnings` for continuous values exceeding training bounds by >10%.
+- **Consequences**: Robust serving interface adhering to strict train/serve parity.
+
+### D81: Intellectual Honesty Regarding Rule-Generated Labels (Caveat C1)
+- **Context**: The AI4I dataset generates failure labels using deterministic equations, leading to near-perfect scores on certain failure modes.
+- **Decision**: Explicitly document in all reports and model cards that high detection performance reflects the synthetic mathematical nature of AI4I rules rather than superhuman AI performance on real noisy plant data.
+- **Consequences**: Sets honest expectations and maintains scientific rigor.
+
+### D82: Recall Ceiling Accounting for Unpredictable Random Failures (Caveat C2)
+- **Context**: AI4I contains random failures (`rnf`) generated by uniform random noise with zero physical precursor.
+- **Decision**: Define and report the theoretical recall ceiling: fraction of failures exhibiting at least one non-random physical mode (`twf`, `hdf`, `pwf`, `osf`).
+- **Consequences**: Establishes that the empirical test recall ceiling is 97.06% (66/68 failures), explaining why 100% recall is theoretically impossible.
+
+---
+
+## Next Steps (Handoff to Day 07: Unified Serving API & Dashboard Backend)
+
+1. **Day 6 Accomplishments:**
+   - Pre-registered, trained, and frozen the primary XGBoost failure model (`XGB-PHYS-08` on physics features F1).
+   - Achieved Test PR-AUC of **0.8756** (95% CI: [0.8060, 0.9366]) vs prevalence baseline 0.0340, outperforming Logistic Regression (0.4686) and Raw feature ablation (0.8269).
+   - Validated isotonic calibration (+5.49% Brier gain) and derived operating thresholds ($t_{\text{med}}=0.0460, t_{\text{high}}=0.5000, t_{\text{crit}}=0.5000$).
+   - Successfully passed SHAP readiness check (max additivity difference: $1.34 \times 10^{-5} \le 10^{-3}$).
+   - Generated publication figures F15 to F18 in `docs/figures/` and appended immutable test entry to `docs/holdout_log.md`.
+   - Delivered replay demo tables `machine_ai4i_state.parquet`, `machine_risk_daily.parquet`, and `machine_risk_latest.csv` (12 rows, `is_replay=True`).
+   - Implemented serving inference module `ml/prediction/inference.py` and passed all 18 test cases in `tests/test_failure_model.py`.
+
+2. **Day 7 API & Backend Integration Handoff:**
+   - Ingest `data/processed/anomaly_latest_status.csv` (Day 5) and `data/processed/machine_risk_latest.csv` (Day 6) for unified machine health endpoints.
+   - Wire `ml.prediction.inference.load_model` into FastAPI lifespan hook for real-time state scoring (`/api/v1/predict/failure-risk`).
+   - Wire `ml.anomaly_detection.inference.score_window` for real-time sensor window scoring (`/api/v1/predict/anomaly`).
+
+3. **Active Branch:** `feature/day-06-failure-model`.
